@@ -1,9 +1,8 @@
 """
 Rider × race scoring for the PCM Season Planner optimiser.
 
-A race score represents how well a rider's stats match the terrain demands of a
-race, expressed as a 0–100 float.  It is computed by averaging the rider's
-relevant stat over every stage in the race, using these mappings:
+A race score is the sum of the rider's relevant stat across every stage in the
+race, using these terrain → stat mappings:
 
     stage_type          → stat used
     ──────────────────────────────
@@ -14,14 +13,14 @@ relevant stat over every stage in the race, using these mappings:
     Normal + Mountain   → mountain
     Normal + MedMtn     → medium_mountain
 
-If a stage has no terrain data, it is skipped (not counted in the average).
-If a race has no stages, the score is 0.0; if the rider's stat is None it counts
-as 0.
+Because rider stats are integers, the score is an integer too.  No averaging
+is performed here — stage-count and rider-count scaling will be added later.
+Stages with missing or unrecognised terrain are skipped (score contribution 0).
 
 Public API
 ----------
-build_scoring_matrix(data)  →  dict[(rider_id, race_id), float]
-score_rider_for_race(rider, stages)  →  float
+build_scoring_matrix(data)  →  dict[(rider_id, race_id), int]
+score_rider_for_race(rider, stages)  →  int
 """
 
 from __future__ import annotations
@@ -55,31 +54,27 @@ def _stage_stat_name(stage: Stage) -> Optional[str]:
     return None
 
 
-def score_rider_for_race(rider: Rider, stages: list[Stage]) -> float:
-    """Compute a 0–100 score for how well *rider* suits the terrain of *stages*.
+def score_rider_for_race(rider: Rider, stages: list[Stage]) -> int:
+    """Return the integer score for *rider* across the terrain of *stages*.
 
-    The score is the mean of the rider's relevant stat across all stages that
-    have recognisable terrain data.  Stages with unrecognised or missing terrain
-    are excluded from both the numerator and denominator.  Returns 0.0 if there
-    are no scorable stages.
+    The score is the sum of the rider's relevant stat for each stage that has
+    recognisable terrain data.  Stages with missing or unrecognised terrain
+    contribute 0.  Returns 0 if there are no scorable stages.
     """
     total = 0
-    count = 0
     for stage in stages:
         stat_name = _stage_stat_name(stage)
         if stat_name is None:
             continue
-        stat_value = getattr(rider, stat_name, None) or 0
-        total += stat_value
-        count += 1
-
-    return total / count if count else 0.0
+        total += getattr(rider, stat_name, None) or 0
+    return total
 
 
-def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], float]:
+def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], int]:
     """Return rider × race scores for all (rider, race) pairs in *data*.
 
-    Keys are ``(rider.id, race.id)``; values are 0–100 floats.
+    Keys are ``(rider.id, race.id)``; values are integer sums of rider stats
+    across each stage's relevant terrain stat.
 
     Only races that appear in ``data.races`` are included (i.e., races the
     player's team is actively entered in, already filtered by invitation state).
@@ -92,7 +87,7 @@ def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], float]:
         if stage.race_id in race_ids:
             stages_by_race[stage.race_id].append(stage)
 
-    matrix: dict[tuple[int, int], float] = {}
+    matrix: dict[tuple[int, int], int] = {}
     for rider in data.riders:
         for race in data.races:
             stages = stages_by_race.get(race.id, [])

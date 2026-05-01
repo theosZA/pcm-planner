@@ -18,6 +18,45 @@ from pathlib import Path
 from optimise.model import PlannerData, Race, Rider, Stage
 
 
+def save_result(
+    conn: sqlite3.Connection,
+    result: "SolveResult",
+    time_limit: float | None,
+) -> int:
+    """Persist a solve result to the database.
+
+    Inserts one row into ``optimise_run`` and one row per assigned (rider, race)
+    pair into ``optimise_assignment``.  Returns the new run ID.
+
+    The tables are created by the migrate schema; if they don't exist yet,
+    an informative error will be raised.
+    """
+    from optimise.solver import SolveResult  # local import avoids circular dep
+
+    cur = conn.execute(
+        """
+        INSERT INTO optimise_run (solver_status, objective_value, time_limit_seconds)
+        VALUES (?, ?, ?);
+        """,
+        (result.status, result.objective_value, time_limit),
+    )
+    run_id = cur.lastrowid
+
+    conn.executemany(
+        """
+        INSERT INTO optimise_assignment (run_id, rider_id, race_id)
+        VALUES (?, ?, ?);
+        """,
+        [
+            (run_id, rider_id, race_id)
+            for (rider_id, race_id), assigned_flag in result.assigned.items()
+            if assigned_flag
+        ],
+    )
+    conn.commit()
+    return run_id
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
     """Open a connection to the planner SQLite database.
 
@@ -139,6 +178,7 @@ def _load_races(conn: sqlite3.Connection) -> list[Race]:
         JOIN team t ON t.id = tre.team_id
         WHERE t.player IS NOT NULL
           AND tre.invitation_state_id IN (1, 3, 8)
+          AND COALESCE(race.level, '') NOT IN ('NationalChampionship', 'NationalChampionshipITT')
         ORDER BY race.start_date, race.name;
         """
     ).fetchall()
@@ -176,6 +216,7 @@ def _load_stages(conn: sqlite3.Connection) -> list[Stage]:
         JOIN team t ON t.id = tre.team_id
         WHERE t.player IS NOT NULL
           AND tre.invitation_state_id IN (1, 3, 8)
+          AND COALESCE(race.level, '') NOT IN ('NationalChampionship', 'NationalChampionshipITT')
         ORDER BY s.race_id, s.stage_number;
         """
     ).fetchall()

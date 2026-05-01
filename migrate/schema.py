@@ -17,6 +17,8 @@ from typing import Optional
 DROP_SQL = """
 PRAGMA foreign_keys = OFF;
 
+DROP TABLE IF EXISTS optimise_assignment;
+DROP TABLE IF EXISTS optimise_run;
 DROP TABLE IF EXISTS stage;
 DROP TABLE IF EXISTS team_race_entry;
 DROP TABLE IF EXISTS race;
@@ -287,6 +289,31 @@ CREATE INDEX IF NOT EXISTS idx_stage_date
 
 CREATE INDEX IF NOT EXISTS idx_stage_variant
     ON stage(variant);
+
+CREATE TABLE IF NOT EXISTS optimise_run (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    solver_status TEXT NOT NULL,
+    objective_value INTEGER NOT NULL,
+    time_limit_seconds REAL  -- NULL means no limit was set
+);
+
+CREATE TABLE IF NOT EXISTS optimise_assignment (
+    id INTEGER PRIMARY KEY,
+    run_id INTEGER NOT NULL,
+    rider_id INTEGER NOT NULL,
+    race_id INTEGER NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES optimise_run(id),
+    FOREIGN KEY (rider_id) REFERENCES rider(id),
+    FOREIGN KEY (race_id) REFERENCES race(id),
+    UNIQUE (run_id, rider_id, race_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_optimise_assignment_run
+    ON optimise_assignment(run_id);
+
+CREATE INDEX IF NOT EXISTS idx_optimise_assignment_rider
+    ON optimise_assignment(rider_id);
 """
 
 

@@ -8,7 +8,9 @@ The goal of this project is to help create better team race calendars than PCM's
 
 ## Current status
 
-The data import pipeline is complete. The `migrate` package can:
+The data import pipeline and the initial optimiser are complete.
+
+The `migrate` package can:
 
 - Read the active in-game date and player team automatically from the Lachis export (no manual configuration needed).
 - Create the local planner SQLite database schema from scratch, or reset and rebuild it.
@@ -20,7 +22,15 @@ The data import pipeline is complete. The `migrate` package can:
 - Cache previously exported stage metadata — re-runs are fast because stage files almost never change.
 - Store everything in a clean local SQLite database ready for the optimiser.
 
-What is not yet built: the optimiser, the web viewer, and writeback to PCM save files.
+The `optimise` package can:
+
+- Load riders, races, and stage terrain data from the planner database.
+- Pre-calculate a terrain-suitability score (integer sum of relevant rider stats across all stages) for every rider × race pair.
+- Solve a CP-SAT optimisation model (Google OR-Tools) that maximises total score subject to hard constraints.
+- Save every solve result — status, objective, and the full rider–race assignment — to the database.
+- Print a season summary, validation checks, and a per-rider race-days bar chart to the console.
+
+What is not yet built: the web viewer and writeback to PCM save files.
 
 ---
 
@@ -111,7 +121,68 @@ migrate/
 
 ---
 
-## Project goals
+## The `optimise` package
+
+### What it does
+
+The `optimise` package reads the planner database and assigns riders to races using a CP-SAT integer programming model (Google OR-Tools).
+
+Scoring is based on stage terrain: for each stage in a race, the rider's relevant stat is summed (Flat → `flat`, Hill → `hill`, Medium Mountain → `medium_mountain`, Mountain → `mountain`, time trials → `time_trial`). No averaging is applied; longer and harder races naturally score higher.
+
+Hard constraints currently enforced:
+
+| Constraint | Detail |
+|---|---|
+| Squad size | Each race gets at most `rider_capacity` riders |
+| Season cap | No rider may exceed 75 race days |
+| No overlap | A rider cannot be assigned to two races whose date ranges intersect |
+
+National championship races are excluded from optimisation (they are heavily overlapping single-day events that the scheduler handles separately).
+
+Each solve result is written to the database (`optimise_run` and `optimise_assignment` tables), so results are queryable and can be served by a future web viewer.
+
+### Prerequisites
+
+- Python 3.10+
+- OR-Tools: `pip install ortools` (or install via the venv — already done if you used `scripts\optimise.bat`)
+- A populated planner database (run `scripts\migrate.bat` first)
+
+### Running the optimiser
+
+```bat
+scripts\optimise.bat
+```
+
+Or run directly:
+
+```bat
+.venv\Scripts\python.exe -m optimise --database data\planner.sqlite
+```
+
+Add `--time-limit 30` to cap the solver at 30 seconds and get a fast feasible result. Without a limit the solver runs until it proves optimality (may take several minutes for large calendars).
+
+### CLI reference
+
+```
+--database PATH      Path to the planner SQLite database.
+--time-limit SECS    Optional solver wall-clock cap in seconds. Omit for no limit.
+```
+
+### Package layout
+
+```
+optimise/
+  __init__.py       Package marker.
+  model.py          Data classes: Rider, Race, Stage, PlannerData.
+  db.py             Read-only DB access (load_planner_data) + save_result() for writing.
+  scoring.py        Terrain → stat mapping; build_scoring_matrix() returns dict[(rider_id, race_id), int].
+  constraints.py    Pre-solve feasibility checks (rider count, race data, aggregate days).
+  solver.py         CP-SAT model: variables, objective, constraints, solve().
+  __main__.py       CLI entry point — run with python -m optimise.
+```
+
+---
+
 
 The long-term goal is a semi-automated season planning tool that can:
 
@@ -134,8 +205,8 @@ It will include:
 * ~~A helper script to inspect/probe the Lachis exported database.~~ ✓ Done (`scripts/inspect_*.py`, `scripts/probe_cds_file.py`)
 * ~~A Python script to initialise our own local SQLite database.~~ ✓ Done (`migrate/schema.py`)
 * ~~A Python migration script to import core data from the Lachis export.~~ ✓ Done (`migrate/` package)
-* A Python optimisation script to assign riders to races.
-* A local SQLite database storing imported data and optimisation results.
+* ~~A Python optimisation script to assign riders to races.~~ ✓ Done (`optimise/` package)
+* ~~A local SQLite database storing imported data and optimisation results.~~ ✓ Done
 * A Razor web app for viewing the generated plan.
 
 The initial optimiser will answer only one question:
@@ -196,8 +267,8 @@ Each step should be easy to validate before moving on:
 1. ~~Inspect the source database.~~ ✓
 2. ~~Create the empty local database.~~ ✓
 3. ~~Import basic data.~~ ✓
-4. Run a simple optimiser.
-5. Save optimisation results.
+4. ~~Run a simple optimiser.~~ ✓
+5. ~~Save optimisation results.~~ ✓
 6. View the plan in the web app.
 7. Improve the UI.
 8. Iterate on optimisation quality.
