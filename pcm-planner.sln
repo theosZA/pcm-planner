@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37111.16 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pcm-planner", "pcm-planner\pcm-planner.csproj", "{499A8D44-FCB9-49F0-8B8E-83C3C94690D7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{499A8D44-FCB9-49F0-8B8E-83C3C94690D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{499A8D44-FCB9-49F0-8B8E-83C3C94690D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{499A8D44-FCB9-49F0-8B8E-83C3C94690D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{499A8D44-FCB9-49F0-8B8E-83C3C94690D7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E095D80A-1253-425F-9D96-F4C9B06C2217}
+	EndGlobalSection
+EndGlobal

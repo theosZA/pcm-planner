@@ -1,0 +1,86 @@
+@page "/race/{RaceId:int}"
+@rendermode InteractiveServer
+@inject pcm_planner.Data.RosterService RosterService
+
+<PageTitle>@(race?.Name ?? "Race")</PageTitle>
+
+@if (race is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <h1>@race.Name</h1>
+    <p class="text-muted mb-4">@FormatDates(race.StartDate, race.EndDate)</p>
+
+    <div class="row g-4">
+        <div class="col-auto">
+            <h2>Riders</h2>
+            @if (race.Riders.Count == 0)
+            {
+                <p class="text-muted">No riders assigned.</p>
+            }
+            else
+            {
+                <ul class="list-unstyled">
+                    @foreach (var rider in race.Riders)
+                    {
+                        <li><a href="/rider/@rider.Id">@rider.DisplayName</a></li>
+                    }
+                </ul>
+            }
+        </div>
+
+        @if (race.Stages.Count > 0)
+        {
+            <div class="col-auto">
+                <h2>Stages</h2>
+                <table class="table table-sm table-striped w-auto">
+                    <thead>
+                        <tr>
+                            <th>Stage</th>
+                            <th>Terrain</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var stage in race.Stages)
+                        {
+                            <tr>
+                                <td>@stage.StageNumber</td>
+                                <td>@(stage.Relief ?? "—")</td>
+                                <td>@FormatStageType(stage.StageType)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    }
+
+@code {
+    [Parameter] public int RaceId { get; set; }
+
+    private pcm_planner.Data.RaceDetail? race;
+
+    protected override async Task OnInitializedAsync()
+    {
+        race = await RosterService.GetRaceDetailAsync(RaceId);
+    }
+
+    private static string FormatDates(DateOnly start, DateOnly end)
+    {
+        if (start == end)
+            return start.ToString("d MMM yyyy");
+        return $"{start:d MMM yyyy} – {end:d MMM yyyy}";
+    }
+
+    private static string FormatStageType(string? stageType) => stageType switch
+    {
+        "TimeTrial"     => "ITT",
+        "TeamTimeTrial" => "TTT",
+        _               => ""
+    };
+}

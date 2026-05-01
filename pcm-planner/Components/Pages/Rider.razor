@@ -1,0 +1,99 @@
+@page "/rider/{RiderId:int}"
+@rendermode InteractiveServer
+@inject pcm_planner.Data.RosterService RosterService
+
+<PageTitle>@(rider?.DisplayName ?? "Rider")</PageTitle>
+
+@if (rider is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <h1>@rider.DisplayName</h1>
+
+    <dl class="row mb-4">
+        @if (rider.Age is not null)
+        {
+            <dt class="col-sm-3">Age</dt>
+            <dd class="col-sm-9">@rider.Age</dd>
+        }
+    </dl>
+
+    <h2>Stats</h2>
+    <table class="table table-sm table-bordered w-auto mb-4">
+        <tbody>
+            @Stat("Flat",            rider.Flat)
+            @Stat("Hill",            rider.Hill)
+            @Stat("Medium Mountain", rider.MediumMountain)
+            @Stat("Mountain",        rider.Mountain)
+            @Stat("Time Trial",      rider.TimeTrial)
+            @Stat("Prologue",        rider.Prologue)
+            @Stat("Cobble",          rider.Cobble)
+            @Stat("Sprint",          rider.Sprint)
+            @Stat("Acceleration",    rider.Acceleration)
+            @Stat("Stamina",         rider.Stamina)
+            @Stat("Resistance",      rider.Resistance)
+            @Stat("Recovery",        rider.Recovery)
+            @Stat("Baroudeur",       rider.Baroudeur)
+        </tbody>
+    </table>
+
+    <h2>Assigned Races</h2>
+    @if (races is null || races.Count == 0)
+    {
+        <p class="text-muted">No races assigned.</p>
+    }
+    else
+    {
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Race</th>
+                    <th>Date</th>
+                    <th class="text-end">Stages</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var race in races)
+                {
+                    <tr>
+                        <td><a href="/race/@race.RaceId">@race.Name</a></td>
+                        <td>@FormatDates(race.StartDate, race.EndDate)</td>
+                        <td class="text-end">@(race.StageCount > 1 ? race.StageCount.ToString() : "")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    }
+
+@code {
+    [Parameter] public int RiderId { get; set; }
+
+    private pcm_planner.Data.RiderDetail? rider;
+    private List<pcm_planner.Data.RiderAssignedRace>? races;
+
+    protected override async Task OnInitializedAsync()
+    {
+        rider = await RosterService.GetRiderDetailAsync(RiderId);
+        races = await RosterService.GetRiderAssignedRacesAsync(RiderId);
+    }
+
+    private static RenderFragment Stat(string label, int? value) => __builder =>
+    {
+        if (value is null) return;
+        <tr>
+            <th scope="row" class="text-nowrap">@label</th>
+            <td class="text-end">@value</td>
+        </tr>;
+    };
+
+    private static string FormatDates(DateOnly start, DateOnly end)
+    {
+        if (start == end)
+            return start.ToString("d MMM yyyy");
+        return $"{start:d MMM yyyy} – {end:d MMM yyyy}";
+    }
+}

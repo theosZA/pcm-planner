@@ -219,3 +219,5 @@ __marimo__/
 
 # Visual Studio
 .vs/
+bin/
+obj/

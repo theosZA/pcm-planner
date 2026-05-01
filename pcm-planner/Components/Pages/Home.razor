@@ -1,0 +1,55 @@
+@page "/"
+@rendermode InteractiveServer
+@inject pcm_planner.Data.RosterService RosterService
+
+<PageTitle>All Races</PageTitle>
+
+@if (races is null)
+{
+    <p>Loading...</p>
+}
+else if (races.Count == 0)
+{
+    <p class="text-muted">No races assigned.</p>
+}
+else
+{
+    <h1>All Races</h1>
+
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Race</th>
+                <th>Date</th>
+                <th class="text-end">Stages</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var race in races)
+            {
+                <tr>
+                    <td><a href="/race/@race.RaceId">@race.Name</a></td>
+                    <td>@FormatDates(race.StartDate, race.EndDate)</td>
+                    <td class="text-end">@(race.StageCount > 1 ? race.StageCount : "")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<pcm_planner.Data.RiderAssignedRace>? races;
+
+    protected override async Task OnInitializedAsync()
+    {
+        races = await RosterService.GetAllAssignedRacesAsync();
+    }
+
+    private static string FormatDates(DateOnly start, DateOnly end)
+    {
+        if (start == end)
+            return start.ToString("d MMM yyyy");
+        return $"{start:d MMM yyyy} – {end:d MMM yyyy}";
+    }
+}
+

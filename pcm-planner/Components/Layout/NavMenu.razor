@@ -1,0 +1,41 @@
+﻿@rendermode InteractiveServer
+@inject pcm_planner.Data.RosterService RosterService
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">PCM Planner</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-calendar3-nav-menu" aria-hidden="true"></span> All
+            </NavLink>
+        </div>
+
+        @if (riders is not null)
+        {
+            foreach (var rider in riders)
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="@($"rider/{rider.Id}")">
+                        @rider.DisplayName (@rider.RaceDays)
+                    </NavLink>
+                </div>
+            }
+        }
+    </nav>
+</div>
+
+@code {
+    private List<pcm_planner.Data.RiderRaceDays>? riders;
+
+    protected override async Task OnInitializedAsync()
+    {
+        riders = await RosterService.GetRosterAsync();
+    }
+}

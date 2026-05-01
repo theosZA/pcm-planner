@@ -30,7 +30,16 @@ The `optimise` package can:
 - Save every solve result — status, objective, and the full rider–race assignment — to the database.
 - Print a season summary, validation checks, and a per-rider race-days bar chart to the console.
 
-What is not yet built: the web viewer and writeback to PCM save files.
+The `pcm-planner` Blazor Server web app can:
+
+- Display all races from the latest optimisation run in a chronological table, with links to race detail pages.
+- Show a race detail page listing the assigned riders and, for multi-stage races, each stage's terrain and type (ITT/TTT).
+- Show a rider detail page with age, all stats, and the rider's assigned race list.
+- List every roster rider in the sidebar navigation with their total assigned race days.
+- Show a season summary header (season year, race count, rider count, average race days per rider).
+- Read everything directly from the planner SQLite database via `RosterService` (no separate API layer).
+
+What is not yet built: writeback to PCM save files.
 
 ---
 
@@ -183,6 +192,54 @@ optimise/
 
 ---
 
+## The `pcm-planner` web app
+
+A Blazor Server application that visualises the latest optimisation result from the planner database.
+
+### Pages
+
+| Page | Route | Description |
+|---|---|---|
+| All Races | `/` | Chronological table of all races in the latest optimisation run, with links to individual race pages. |
+| Race detail | `/race/{id}` | Assigned riders and (for multi-stage races) a stage list showing terrain and type (ITT/TTT). |
+| Rider detail | `/rider/{id}` | Rider age, full stat table, and assigned race list with dates. |
+
+The sidebar navigation lists every roster rider with their total assigned race days. A header bar shows the season year, race count, rider count, and average race days per rider.
+
+### Prerequisites
+
+- .NET 9 SDK
+- A populated `data/planner.sqlite` database (produced by `migrate` and `optimise`)
+
+### Running the web app
+
+```bat
+cd pcm-planner
+dotnet run
+```
+
+The app defaults to `http://localhost:5000`. The database path is configured in `appsettings.json` under `DatabasePath` (default: `..\data\planner.sqlite`).
+
+### Project layout
+
+```
+pcm-planner/
+  Program.cs                   Application entry point and DI registration.
+  Data/
+    RosterService.cs           All DB queries; returns typed records to Razor components.
+  Components/
+    Layout/
+      MainLayout.razor         Shell layout with sidebar and header.
+      NavMenu.razor            Sidebar — rider list with race day counts.
+      SeasonSummary.razor      Header bar — season stats summary.
+    Pages/
+      Home.razor               All-races list (route: /).
+      Race.razor               Race detail (route: /race/{id}).
+      Rider.razor              Rider detail (route: /rider/{id}).
+```
+
+---
+
 
 The long-term goal is a semi-automated season planning tool that can:
 
@@ -207,7 +264,7 @@ It will include:
 * ~~A Python migration script to import core data from the Lachis export.~~ ✓ Done (`migrate/` package)
 * ~~A Python optimisation script to assign riders to races.~~ ✓ Done (`optimise/` package)
 * ~~A local SQLite database storing imported data and optimisation results.~~ ✓ Done
-* A Razor web app for viewing the generated plan.
+* ~~A Razor web app for viewing the generated plan.~~ ✓ Done (`pcm-planner/` Blazor Server app)
 
 The initial optimiser will answer only one question:
 
@@ -269,7 +326,7 @@ Each step should be easy to validate before moving on:
 3. ~~Import basic data.~~ ✓
 4. ~~Run a simple optimiser.~~ ✓
 5. ~~Save optimisation results.~~ ✓
-6. View the plan in the web app.
+6. ~~View the plan in the web app.~~ ✓
 7. Improve the UI.
 8. Iterate on optimisation quality.
 
