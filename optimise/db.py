@@ -15,7 +15,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from optimise.model import PlannerData, Race, Rider
+from optimise.model import PlannerData, Race, Rider, Stage
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -161,6 +161,36 @@ def _load_races(conn: sqlite3.Connection) -> list[Race]:
     ]
 
 
+def _load_stages(conn: sqlite3.Connection) -> list[Stage]:
+    """Load stage terrain data for all races the player's team is entered in."""
+    rows = conn.execute(
+        """
+        SELECT
+            s.id,
+            s.race_id,
+            s.stage_type,
+            s.relief
+        FROM stage s
+        JOIN race ON race.id = s.race_id
+        JOIN team_race_entry tre ON tre.race_id = race.id
+        JOIN team t ON t.id = tre.team_id
+        WHERE t.player IS NOT NULL
+          AND tre.invitation_state_id IN (1, 3, 8)
+        ORDER BY s.race_id, s.stage_number;
+        """
+    ).fetchall()
+
+    return [
+        Stage(
+            id=row["id"],
+            race_id=row["race_id"],
+            stage_type=row["stage_type"],
+            relief=row["relief"],
+        )
+        for row in rows
+    ]
+
+
 def load_planner_data(conn: sqlite3.Connection) -> PlannerData:
     """Load all data needed for a planning run from the planner database.
 
@@ -170,10 +200,12 @@ def load_planner_data(conn: sqlite3.Connection) -> PlannerData:
     team_name, player_name = _load_player_team(conn)
     riders = _load_riders(conn)
     races = _load_races(conn)
+    stages = _load_stages(conn)
 
     return PlannerData(
         player_team_name=team_name,
         player_name=player_name,
         riders=riders,
         races=races,
+        stages=stages,
     )

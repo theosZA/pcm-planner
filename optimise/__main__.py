@@ -17,7 +17,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from optimise import constraints, db
+from optimise import constraints, db, scoring
 
 
 def main() -> None:
@@ -66,6 +66,12 @@ def main() -> None:
                 f"{race.race_days:>4}  {race.rider_capacity:>5}  {dates}"
             )
 
+    print()
+
+    # --- Scoring matrix -------------------------------------------------------
+    matrix = scoring.build_scoring_matrix(data)
+    print(f"Rider-race scores computed: {len(matrix)} pairs "
+          f"({len(data.riders)} riders × {len(data.races)} races)")
     print()
 
     # --- Validation checks ----------------------------------------------------

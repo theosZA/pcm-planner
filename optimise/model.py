@@ -20,6 +20,16 @@ from typing import Optional
 
 
 @dataclass
+class Stage:
+    """A single stage imported for a race, carrying terrain metadata."""
+
+    id: int                     # planner DB primary key
+    race_id: int                # FK → race.id
+    stage_type: Optional[str]   # "Normal", "TimeTrial", "TeamTimeTrial"
+    relief: Optional[str]       # "Flat", "Hill", "Medium Mountain", "Mountain"
+
+
+@dataclass
 class Rider:
     """A rider on the player's team, with stats used for race scoring."""
 
@@ -72,6 +82,7 @@ class PlannerData:
     player_name: str
     riders: list[Rider]
     races: list[Race]
+    stages: list[Stage] = field(default_factory=list)
 
     @property
     def total_race_days_demanded(self) -> int:
