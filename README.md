@@ -4,7 +4,112 @@ A companion planning tool for **Pro Cycling Manager 2024** season scheduling.
 
 The goal of this project is to help create better team race calendars than PCM's built-in automated planner, while still preserving the fun strategic decisions: choosing Grand Tour squads, assigning key riders to major objectives, and shaping the season around the team's strengths.
 
-The project will start small: import riders and fixed race entries from a Lachis Editor exported database, run a basic optimisation to assign riders to races, save the generated plan into a local SQLite database, and view the results in a simple web app.
+---
+
+## Current status
+
+The data import pipeline is complete. The `migrate` package can:
+
+- Read the active in-game date and player team automatically from the Lachis export (no manual configuration needed).
+- Create the local planner SQLite database schema from scratch, or reset and rebuild it.
+- Import all teams, and import riders and rider stats for the player's team.
+- Calculate exact rider ages as of the in-game date.
+- Import all races the player's team is entered in, along with their race class, race type, and stage schedules.
+- Resolve stage variant names to real `.cds` files (following CDX redirect chains across mod and base-game Stages folders).
+- Invoke `CTStageEditor.exe` to export per-stage metadata XML (length, elevation, terrain type, surface difficulty, etc.).
+- Cache previously exported stage metadata — re-runs are fast because stage files almost never change.
+- Store everything in a clean local SQLite database ready for the optimiser.
+
+What is not yet built: the optimiser, the web viewer, and writeback to PCM save files.
+
+---
+
+## The `migrate` package
+
+### What it does
+
+The `migrate` package populates the local planner SQLite database from a [Lachis Editor](https://www.lachistudios.com/) XML export.
+
+It reads:
+
+| Source file | What is extracted |
+|---|---|
+| `GAM_config.xml` | Current in-game date |
+| `GAM_user.xml` | Player's team ID and display name |
+| `DYN_team.xml` | All teams |
+| `DYN_cyclist.xml` | Riders and stats (player's team only) |
+| `DYN_team_race.xml` | Races the player's team is entered in |
+| `STA_race_class.xml` | Race class definitions (tier, squad sizes, stage race flag) |
+| `STA_race_type.xml` | Race type terrain-weight profiles |
+| `STA_race.xml` | Race names, dates, variant, class/type links |
+| `STA_stage.xml` | Stage schedules (selected stages only) |
+| `.cds` / `.cdx` files | Stage file resolution via CDX fallback chains |
+| Stage Editor XMLs | Per-stage metadata (elevation, length, surface, terrain) |
+
+### Prerequisites
+
+- Python 3.10+
+- A Lachis Editor XML export of your PCM career save
+- The PCM base-game `CM_Stages` folder
+- Your mod/workshop `Stages` folder (if applicable)
+- `CTStageEditor.exe` from the PCM 2024 Tool install
+
+### Running the migration
+
+Edit `scripts/migrate.bat` to point at your local paths, then run it from the project root:
+
+```bat
+scripts\migrate.bat
+```
+
+Or run directly:
+
+```bat
+python -m migrate ^
+  --target data\planner.sqlite ^
+  --lachis-export C:\path\to\LachisEditor\Data\Career_1 ^
+  --reset ^
+  --import-races-and-stages ^
+  --mod-stages "C:\path\to\workshop\Stages" ^
+  --base-stages "C:\path\to\PCM2024\CM_Stages" ^
+  --stage-editor-exe "C:\path\to\PCM2024 Tool\CTStageEditor.exe"
+```
+
+### CLI reference
+
+```
+--target PATH             Path to the planner SQLite database to create or update.
+--reset                   Drop all tables and recreate from scratch. Destructive.
+--lachis-export PATH      Path to the Lachis Editor XML export folder.
+--import-races-and-stages Import races, stages, and Stage Editor metadata.
+--mod-stages PATH         Mod/workshop Stages folder (searched before base game).
+--base-stages PATH        Base-game CM_Stages folder.
+--stage-editor-exe PATH   Path to CTStageEditor.exe.
+--force-stage-export      Delete cached Stage Editor XMLs and re-export everything.
+                          Only needed if .cds stage files have actually changed.
+```
+
+The player's team and the current in-game date are read automatically from the export — no manual configuration is required.
+
+Stage metadata export is the slowest step (CTStageEditor must open for each batch). On subsequent runs the cached XMLs are reused, so only newly resolved stages are exported.
+
+### Package layout
+
+```
+migrate/
+  __init__.py       Package entry point and usage docs.
+  schema.py         SQL DDL for all tables and indexes, plus db setup functions.
+  parsing.py        XML streaming helpers, type coercion, and domain converters.
+                    Also reads GAM_config.xml (game date) and GAM_user.xml (player team).
+  teams.py          Team import (DYN_team.xml) and team-ID lookup utilities.
+  riders.py         Rider and rider-stat import (DYN_cyclist.xml).
+  stage_files.py    CDX/CDS stage file resolution, Stage Editor export, metadata parsing.
+  races.py          Race class/type/entry/race/stage import. Orchestrates the full
+                    race-and-stage pipeline.
+  __main__.py       CLI entry point — run with python -m migrate.
+```
+
+---
 
 ## Project goals
 
@@ -18,9 +123,7 @@ The long-term goal is a semi-automated season planning tool that can:
 - Eventually support rider roles, race profiles, objectives, fitness planning, and training camps.
 - Provide a readable calendar-style view of the planned season.
 
-The first version will be deliberately simple. It will focus on proving the end-to-end pipeline:
-
-Lachis export → local SQLite planner DB → optimiser → saved assignments → web viewer
+---
 
 ## Phase 1 scope
 
@@ -28,9 +131,9 @@ Phase 1 is focused on a minimal working version.
 
 It will include:
 
-* A helper script to inspect/probe the Lachis exported database.
-* A Python script to initialise our own local SQLite database.
-* A Python migration script to import core data from the Lachis export.
+* ~~A helper script to inspect/probe the Lachis exported database.~~ ✓ Done (`scripts/inspect_*.py`, `scripts/probe_cds_file.py`)
+* ~~A Python script to initialise our own local SQLite database.~~ ✓ Done (`migrate/schema.py`)
+* ~~A Python migration script to import core data from the Lachis export.~~ ✓ Done (`migrate/` package)
 * A Python optimisation script to assign riders to races.
 * A local SQLite database storing imported data and optimisation results.
 * A Razor web app for viewing the generated plan.
@@ -64,112 +167,6 @@ Initial scoring:
 
 This should be enough to verify that the optimiser is making sensible basic assignments, such as selecting strong hill riders for hilly races and balanced riders for stage races.
 
-## Planned project structure
-
-```text
-pcm-season-planner/
-  README.md
-  .gitignore
-
-  docs/
-    phase-1-plan.md
-
-  scripts/
-    inspect_lachis_db.py
-    init_planner_db.py
-    import_lachis_to_planner_db.py
-    optimise_assignments.py
-
-  src/
-    planner/
-
-  web/
-    PlannerWeb/
-
-  data/
-    .gitkeep
-```
-
-## Main components
-
-### Lachis database inspection
-
-The first helper script will inspect the Lachis Editor exported database and list available tables and columns.
-
-This allows us to identify where PCM stores:
-
-* riders
-* teams
-* rider stats
-* races
-* stages
-* race dates
-* race abbreviations
-* race categories/levels
-* team race entries
-* stage profile types
-* stage distances
-
-### Local planner database
-
-The project will use its own SQLite database rather than working directly against the Lachis export.
-
-This keeps the planner model clean and gives us a stable structure to build on even if PCM/Lachis table names differ between versions or databases.
-
-Initial tables will include:
-
-* `rider`
-* `rider_stat`
-* `race`
-* `stage`
-
-Later tables will store generated plans and rider-race assignments.
-
-### Data migration scripts
-
-Python scripts will migrate selected data from the Lachis export into the local planner database.
-
-Initially this will include:
-
-* riders on our team
-* current rider stats
-* races entered by our team
-* race level/category
-* race dates
-* rider capacity per race
-* race abbreviation, where available
-* stage type and distance
-
-One-day races will be treated as races with one stage.
-
-### Optimisation script
-
-The optimisation script will read from the local SQLite database, build a simple assignment model, solve it, and eventually save the generated plan back into the database.
-
-The first version will optimise only rider-race assignment. Later versions will add:
-
-* existing PCM allocations as fixed assignments
-* race value coefficients
-* rider roles
-* race profiles
-* role-based scoring
-* race-day target penalties
-* more detailed scoring formulas
-
-### Razor web app
-
-A Razor web app will provide a read-only view of the generated plan.
-
-The first views will show:
-
-* all riders and their allocated race days
-* rider detail pages
-* race detail pages
-* assigned riders per race
-* stage breakdowns
-
-Later, the web app will include a calendar/grid view showing race blocks across the season, using colours broadly consistent with PCM's race level colours.
-
 ## Out of scope for the first version
 
 The first version will not handle:
@@ -196,9 +193,9 @@ This project will be built in small, testable steps.
 
 Each step should be easy to validate before moving on:
 
-1. Inspect the source database.
-2. Create the empty local database.
-3. Import basic data.
+1. ~~Inspect the source database.~~ ✓
+2. ~~Create the empty local database.~~ ✓
+3. ~~Import basic data.~~ ✓
 4. Run a simple optimiser.
 5. Save optimisation results.
 6. View the plan in the web app.
@@ -206,3 +203,4 @@ Each step should be easy to validate before moving on:
 8. Iterate on optimisation quality.
 
 The guiding principle is to keep each step small enough that we can tell whether it worked.
+
