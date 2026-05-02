@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from optimise import constraints, db, scoring, solver
+from optimise.model import RaceDayPenalties
 
 
 def main() -> None:
@@ -36,7 +37,29 @@ def main() -> None:
         help="Maximum solver wall-clock time in seconds. Omit for no limit.",
     )
 
+    rdp = parser.add_argument_group(
+        "race-day penalties",
+        "Penalty config that shapes per-rider race-day totals in the objective.",
+    )
+    rdp.add_argument("--target-min",            type=int, default=60,  metavar="DAYS",  help="Target minimum race days (default: 60).")
+    rdp.add_argument("--target-max",            type=int, default=70,  metavar="DAYS",  help="Target maximum race days (default: 70).")
+    rdp.add_argument("--upper-warning",         type=int, default=75,  metavar="DAYS",  help="Warning threshold above target (default: 75).")
+    rdp.add_argument("--absolute-max",          type=int, default=100, metavar="DAYS",  help="Hard cap on race days (default: 100).")
+    rdp.add_argument("--under-min-penalty",     type=int, default=20,  metavar="PTS",   help="Penalty per day under target-min (default: 20).")
+    rdp.add_argument("--above-target-penalty",  type=int, default=30,  metavar="PTS",   help="Penalty per day above target-max up to upper-warning (default: 30).")
+    rdp.add_argument("--above-warning-penalty", type=int, default=200, metavar="PTS",   help="Penalty per day above upper-warning (default: 200).")
+
     args = parser.parse_args()
+
+    penalties = RaceDayPenalties(
+        target_min=args.target_min,
+        target_max=args.target_max,
+        upper_warning=args.upper_warning,
+        absolute_max=args.absolute_max,
+        under_min_penalty_per_day=args.under_min_penalty,
+        above_target_penalty_per_day=args.above_target_penalty,
+        above_warning_penalty_per_day=args.above_warning_penalty,
+    )
 
     conn = db.connect(Path(args.database))
     data = db.load_planner_data(conn)
@@ -51,7 +74,8 @@ def main() -> None:
         total_unique_stage_days = sum(r.race_days for r in data.races)
         print(f"  Stage days across all races: {total_unique_stage_days}")
         print(f"  Rider-days demanded (× squad sizes): {data.total_race_days_demanded}")
-        print(f"  Rider-days available (75 × {len(data.riders)} riders): {data.total_rider_days_available}")
+        print(f"  Rider-days available ({penalties.absolute_max} × {len(data.riders)} riders): "
+              f"{penalties.absolute_max * len(data.riders):,}")
         print()
 
         col_name = 42
@@ -92,27 +116,40 @@ def main() -> None:
     print()
     time_limit_msg = f"{args.time_limit}s" if args.time_limit is not None else "none"
     print(f"Solving…  (time limit: {time_limit_msg})")
-    result = solver.solve(data, matrix, time_limit=args.time_limit)
+    result = solver.solve(data, matrix, time_limit=args.time_limit, penalties=penalties)
     print(f"  Status:      {result.status}")
-    print(f"  Objective:   {result.objective_value:,}  (sum of rider-race scores)")
+    print(f"  Objective:   {result.objective_value:,}  (scores minus race-day penalties)")
     print(f"  Assignments: {result.total_assignments}  "
           f"({len(data.riders)} riders × {len(data.races)} races)")
     print()
 
     # --- Per-rider assignment summary -----------------------------------------
     race_days_map = {r.id: r.race_days for r in data.races}
-    MAX_DAYS = 75
+    p = penalties
 
-    print(f"  {'Rider':<30} {'Race days':>9}  {'/ 75':>4}")
-    print(f"  {'-' * 30} {'---------':>9}  {'----':>4}")
+    print(f"  Race-day bands: target {p.target_min}–{p.target_max}  "
+          f"warning >{p.upper_warning}  cap {p.absolute_max}")
+    print(f"  Penalties/day:  under-min {p.under_min_penalty_per_day}  "
+          f"above-target {p.above_target_penalty_per_day}  "
+          f"above-warning {p.above_warning_penalty_per_day}")
+    print()
+    print(f"  {'Rider':<30} {'Days':>4}  Zone")
+    print(f"  {'-' * 30} {'----':>4}  ----")
     for rider in sorted(data.riders, key=lambda r: r.display_name):
         days = sum(
             race_days_map[race_id]
             for (rid, race_id), assigned_flag in result.assigned.items()
             if rid == rider.id and assigned_flag
         )
-        bar = "#" * min(days, MAX_DAYS) + ("!" * (days - MAX_DAYS) if days > MAX_DAYS else "")
-        print(f"  {rider.display_name:<30} {days:>9}  {bar}")
+        if days < p.target_min:
+            zone = f"under  ({days - p.target_min:+d} vs target)"
+        elif days <= p.target_max:
+            zone = "OK"
+        elif days <= p.upper_warning:
+            zone = f"above  ({days - p.target_max:+d} vs target)"
+        else:
+            zone = f"WARN   ({days - p.upper_warning:+d} vs warning)"
+        print(f"  {rider.display_name:<30} {days:>4}  {zone}")
 
     # --- Persist to database --------------------------------------------------
     run_id = db.save_result(conn, result, args.time_limit)

@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
 
-from optimise.model import PlannerData, Race, Rider
+from optimise.model import PlannerData, Race, RaceDayPenalties, Rider
 
 
 def find_overlapping_pairs(races: list[Race]) -> list[tuple[Race, Race]]:
@@ -65,6 +65,7 @@ def solve(
     data: PlannerData,
     matrix: dict[tuple[int, int], int],
     time_limit: float | None = None,
+    penalties: RaceDayPenalties | None = None,
 ) -> SolveResult:
     """Build and solve the CP-SAT model.
 
@@ -75,11 +76,16 @@ def solve(
     matrix:
         Pre-calculated integer score for each (rider.id, race.id) pair, as
         returned by ``scoring.build_scoring_matrix(data)``.
+    penalties:
+        Race-day band penalty config.  If None, default values are used.
 
     Returns
     -------
     SolveResult with the solver status, objective value, and assignment dict.
     """
+    if penalties is None:
+        penalties = RaceDayPenalties()
+
     model = cp_model.CpModel()
 
     # --- Decision variables: one boolean per (rider, race) pair ---------------
@@ -90,13 +96,45 @@ def solve(
                 f"assign_r{rider.id}_race{race.id}"
             )
 
-    # --- Objective: maximise sum of score × boolean ---------------------------
+    # --- Objective: maximise sum of score × boolean, minus race-day penalties --
     # Scores are already integers, so they can be used directly as coefficients.
     objective_terms = []
     for (rider_id, race_id), var in assigned.items():
         coeff = matrix.get((rider_id, race_id), 0)
         if coeff:
             objective_terms.append(coeff * var)
+
+    # Piecewise-linear race-day penalties, modelled with auxiliary IntVars.
+    # For rider with total_days d:
+    #   under_min  = max(0, target_min − d)          → under_min_penalty/day
+    #   above_warn = max(0, d − upper_warning)        → above_warning_penalty/day
+    #   above_tgt  = max(0, min(d, upper_warning) − target_max)
+    #              = max(0, d − above_warn − target_max)  → above_target_penalty/day
+    p = penalties
+    for rider in data.riders:
+        total_days = sum(
+            race.race_days * assigned[(rider.id, race.id)] for race in data.races
+        )
+
+        under_min = model.new_int_var(0, p.target_min, f"under_min_r{rider.id}")
+        model.add_max_equality(under_min, [0, p.target_min - total_days])
+
+        above_warn = model.new_int_var(
+            0, p.absolute_max - p.upper_warning, f"above_warn_r{rider.id}"
+        )
+        model.add_max_equality(above_warn, [0, total_days - p.upper_warning])
+
+        above_tgt = model.new_int_var(
+            0, p.upper_warning - p.target_max, f"above_tgt_r{rider.id}"
+        )
+        model.add_max_equality(above_tgt, [0, total_days - above_warn - p.target_max])
+
+        if p.under_min_penalty_per_day:
+            objective_terms.append(-p.under_min_penalty_per_day * under_min)
+        if p.above_target_penalty_per_day:
+            objective_terms.append(-p.above_target_penalty_per_day * above_tgt)
+        if p.above_warning_penalty_per_day:
+            objective_terms.append(-p.above_warning_penalty_per_day * above_warn)
 
     model.maximize(sum(objective_terms))
 
@@ -110,11 +148,11 @@ def solve(
             <= race_map[race.id].rider_capacity
         )
 
-    # Each rider can race at most 75 days across the whole season.
+    # Each rider can race at most absolute_max days across the whole season.
     for rider in data.riders:
         model.add(
             sum(race.race_days * assigned[(rider.id, race.id)] for race in data.races)
-            <= 75
+            <= penalties.absolute_max
         )
 
     # A rider can't be assigned to two races that overlap in dates.

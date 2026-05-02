@@ -71,6 +71,29 @@ class Race:
 
 
 @dataclass
+class RaceDayPenalties:
+    """Configurable per-rider race-day band penalties applied to the objective.
+
+    The solver maximises (total score − total penalties).  Penalties push
+    riders towards the ``target_min``–``target_max`` band:
+
+    - Days below ``target_min``    → ``under_min_penalty_per_day`` each.
+    - Days above ``target_max``    → ``above_target_penalty_per_day`` each
+      (up to ``upper_warning``).
+    - Days above ``upper_warning`` → ``above_warning_penalty_per_day`` each.
+    - ``absolute_max`` is enforced as a hard constraint.
+    """
+
+    target_min: int = 60
+    target_max: int = 70
+    upper_warning: int = 75
+    absolute_max: int = 100
+    under_min_penalty_per_day: int = 30
+    above_target_penalty_per_day: int = 20
+    above_warning_penalty_per_day: int = 200
+
+
+@dataclass
 class PlannerData:
     """Complete snapshot of planning data loaded from the planner database.
 
