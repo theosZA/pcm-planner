@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 from migrate.parsing import (
     clean_text,
@@ -404,6 +403,38 @@ def import_selected_stages_for_races(
     return count, stage_rows_for_resolution
 
 
+def apply_race_rules_overrides(
+    conn: sqlite3.Connection,
+    lachis_export: Path,
+    race_ids: set[int],
+) -> int:
+    """Apply per-race rider-capacity overrides from STA_race_rules.xml.
+
+    STA_race_rules rows carry gene_i_max_riders / gene_i_min_riders that
+    supersede the class-level defaults already written onto the race row.
+    Only races in race_ids are updated.
+
+    Returns the number of race rows updated.
+    """
+    count = 0
+    for row in parse_xml_rows(lachis_export / "STA_race_rules.xml", "STA_race_rules"):
+        source_race_id = to_int(row.get("fkIDrace"))
+        if source_race_id is None or source_race_id not in race_ids:
+            continue
+
+        max_riders = to_int(row.get("gene_i_max_riders"))
+        if max_riders is None:
+            continue
+
+        cursor = conn.execute(
+            "UPDATE race SET rider_capacity = ? WHERE source_race_id = ?;",
+            (max_riders, source_race_id),
+        )
+        count += cursor.rowcount
+
+    return count
+
+
 def update_race_dates_and_days(conn: sqlite3.Connection) -> None:
     """Derive start_date, end_date, and race_days on each race from its stage rows.
 
@@ -487,6 +518,12 @@ def import_lachis_race_and_stage_data(
             race_ids=race_ids,
         )
 
+        race_rules_overridden = apply_race_rules_overrides(
+            conn=conn,
+            lachis_export=lachis_export,
+            race_ids=race_ids,
+        )
+
         stages_imported, stage_rows = import_selected_stages_for_races(
             conn=conn,
             lachis_export=lachis_export,
@@ -512,6 +549,7 @@ def import_lachis_race_and_stage_data(
     print(f"Race types imported: {race_types_imported}")
     print(f"Team race entries imported: {team_race_entries_imported}")
     print(f"Team-entered races imported: {races_imported}")
+    print(f"Race rules overrides applied: {race_rules_overridden}")
     print(f"Selected stages imported: {stages_imported}")
     print(f"Stages updated with Stage Editor XML metadata: {stages_updated}")
     print(f"Missing stage files: {missing_stage_files}")
