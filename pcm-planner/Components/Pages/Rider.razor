@@ -6,94 +6,392 @@
 
 @if (rider is null)
 {
-    <p>Loading...</p>
+  <p>Loading...</p>
 }
 else
 {
-    <h1>@rider.DisplayName</h1>
+  <h1>@rider.DisplayName</h1>
 
-    <dl class="row mb-4">
-        @if (rider.Age is not null)
+  <dl class="row mb-4">
+    @if (rider.Age is not null)
+    {
+      <dt class="col-sm-3">Age</dt>
+      <dd class="col-sm-9">@rider.Age</dd>
+    }
+  </dl>
+
+  <h2>Stats</h2>
+  <table class="table table-sm table-bordered w-auto mb-4">
+    <tbody>
+      @Stat("Flat", rider.Flat)
+      @Stat("Hill", rider.Hill)
+      @Stat("Medium Mountain", rider.MediumMountain)
+      @Stat("Mountain", rider.Mountain)
+      @Stat("Time Trial", rider.TimeTrial)
+      @Stat("Prologue", rider.Prologue)
+      @Stat("Cobble", rider.Cobble)
+      @Stat("Sprint", rider.Sprint)
+      @Stat("Acceleration", rider.Acceleration)
+      @Stat("Stamina", rider.Stamina)
+      @Stat("Resistance", rider.Resistance)
+      @Stat("Recovery", rider.Recovery)
+      @Stat("Baroudeur", rider.Baroudeur)
+    </tbody>
+  </table>
+
+  <h2>Calendar</h2>
+
+  <div class="rider-calendar mb-4">
+    @foreach (var month in BuildCalendarMonths(races, allTeamRaces))
+    {
+      <section class="calendar-month">
+        <div class="calendar-month-name">
+          @month.MonthStart.ToString("MMMM")
+        </div>
+
+        <div class="calendar-month-grid" style="--days:31">
+          @for (var day = 1; day <= month.DaysInMonth; day++)
+          {
+            <div class="calendar-day-label @(IsWeekend(month.MonthStart, day) ? "weekend" : "")"
+                  style="grid-column:@day">
+              @if (day == 1 || day % 5 == 0 || day == month.DaysInMonth)
+              {
+                @day
+              }
+            </div>
+          }
+          @for (var day = month.DaysInMonth + 1; day <= 31; day++)
+          {
+            <div class="calendar-day-label calendar-day-padding"
+                  style="grid-column:@day">
+            </div>
+          }
+
+          @foreach (var segment in month.Segments)
+          {
+            <a class="calendar-race-block"
+                style="grid-column:@segment.GridColumn; background-color:@segment.BackgroundColour; color:@segment.TextColour"
+                href="/race/@segment.Race.RaceId"
+                title="@CalendarTooltip(segment.Race)">
+              @RaceLabel(segment.Race)
+            </a>
+          }
+        </div>
+      </section>
+    }
+  </div>
+
+  <h2>Assigned Races</h2>
+  @if (races is null || races.Count == 0)
+  {
+    <p class="text-muted">No races assigned.</p>
+  }
+  else
+  {
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Race</th>
+          <th>Date</th>
+          <th>Level</th>
+          <th class="text-end">Stages</th>
+        </tr>
+      </thead>
+      <tbody>
+        @foreach (var race in races)
         {
-            <dt class="col-sm-3">Age</dt>
-            <dd class="col-sm-9">@rider.Age</dd>
+          <tr>
+            <td><a href="/race/@race.RaceId">@race.Name</a></td>
+            <td>@FormatDates(race.StartDate, race.EndDate)</td>
+            <td class="text-end">@(race.StageCount > 1 ? race.StageCount.ToString() : "")</td>
+          </tr>
         }
-    </dl>
-
-    <h2>Stats</h2>
-    <table class="table table-sm table-bordered w-auto mb-4">
-        <tbody>
-            @Stat("Flat",            rider.Flat)
-            @Stat("Hill",            rider.Hill)
-            @Stat("Medium Mountain", rider.MediumMountain)
-            @Stat("Mountain",        rider.Mountain)
-            @Stat("Time Trial",      rider.TimeTrial)
-            @Stat("Prologue",        rider.Prologue)
-            @Stat("Cobble",          rider.Cobble)
-            @Stat("Sprint",          rider.Sprint)
-            @Stat("Acceleration",    rider.Acceleration)
-            @Stat("Stamina",         rider.Stamina)
-            @Stat("Resistance",      rider.Resistance)
-            @Stat("Recovery",        rider.Recovery)
-            @Stat("Baroudeur",       rider.Baroudeur)
-        </tbody>
+      </tbody>
     </table>
+  }
+}
 
-    <h2>Assigned Races</h2>
-    @if (races is null || races.Count == 0)
-    {
-        <p class="text-muted">No races assigned.</p>
-    }
-    else
-    {
-        <table class="table table-striped">
-            <thead>
-                <tr>
-                    <th>Race</th>
-                    <th>Date</th>
-                    <th class="text-end">Stages</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var race in races)
-                {
-                    <tr>
-                        <td><a href="/race/@race.RaceId">@race.Name</a></td>
-                        <td>@FormatDates(race.StartDate, race.EndDate)</td>
-                        <td class="text-end">@(race.StageCount > 1 ? race.StageCount.ToString() : "")</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
+<style>
+  .rider-calendar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+  }
 
-    }
+  .calendar-month {
+      display: grid;
+      grid-template-columns: 8rem minmax(0, 1fr);
+      gap: 0.75rem;
+      align-items: center;
+  }
+
+  .calendar-month-name {
+      font-weight: 600;
+      white-space: nowrap;
+  }
+
+  .calendar-month-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--days), minmax(16px, 1fr));
+      grid-template-rows: 1.1rem 1.6rem;
+      gap: 2px;
+      min-width: 0;
+      border-left: 1px solid #e5e5e5;
+      padding-left: 2px;
+  }
+
+  .calendar-day-label {
+      grid-row: 1;
+      font-size: 0.65rem;
+      color: #777;
+      text-align: center;
+      border-right: 1px solid #eee;
+      min-width: 0;
+  }
+
+  .calendar-day-padding {
+    visibility: hidden;
+  }
+
+  .calendar-day-label.weekend {
+      background: rgba(0, 0, 0, 0.035);
+  }
+
+  .calendar-race-block {
+      grid-row: 2;
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border-radius: 4px;
+      padding: 0.15rem 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-align: center;
+      text-decoration: none;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16);
+  }
+
+  .calendar-race-block:hover {
+      filter: brightness(0.94);
+      text-decoration: none;
+  }
+
+  @@media (max-width: 900px) {
+      .calendar-month {
+          grid-template-columns: 1fr;
+          gap: 0.25rem;
+      }
+
+      .calendar-month-grid {
+          overflow-x: auto;
+          grid-template-columns: repeat(var(--days), minmax(20px, 20px));
+      }
+  }
+</style>
 
 @code {
-    [Parameter] public int RiderId { get; set; }
+  [Parameter] public int RiderId { get; set; }
 
-    private pcm_planner.Data.RiderDetail? rider;
-    private List<pcm_planner.Data.RiderAssignedRace>? races;
+  private pcm_planner.Data.RiderDetail? rider;
+  private List<pcm_planner.Data.RiderAssignedRace>? races;
+  private List<pcm_planner.Data.RiderAssignedRace>? allTeamRaces;
 
-    protected override async Task OnInitializedAsync()
+  protected override async Task OnInitializedAsync()
+  {
+    rider = await RosterService.GetRiderDetailAsync(RiderId);
+    races = await RosterService.GetRiderAssignedRacesAsync(RiderId);
+    allTeamRaces = await RosterService.GetAllAssignedRacesAsync();
+  }
+
+  private static RenderFragment Stat(string label, int? value) => __builder =>
+  {
+    if (value is null) return;
+    <tr>
+      <th scope="row" class="text-nowrap">@label</th>
+      <td class="text-end">@value</td>
+    </tr>
+    ;
+  };
+
+  private static string FormatDates(DateOnly start, DateOnly end)
+  {
+    if (start == end)
+      return start.ToString("d MMM yyyy");
+    return $"{start:d MMM yyyy} – {end:d MMM yyyy}";
+  }
+
+  private static string CalendarTooltip(pcm_planner.Data.RiderAssignedRace race)
+  {
+    var stageText = race.StageCount == 1 ? "1 stage" : $"{race.StageCount} stages";
+    return $"{RaceLevel(race)} | {race.Name} | {FormatDates(race.StartDate, race.EndDate)} | {stageText}";
+  }
+
+  private static string RaceLevel(pcm_planner.Data.RiderAssignedRace race)
+  {
+    switch (race.Class)
     {
-        rider = await RosterService.GetRiderDetailAsync(RiderId);
-        races = await RosterService.GetRiderAssignedRacesAsync(RiderId);
+      // Championships
+      case "WorldChampionship":
+        return "World Championship";
+      case "WorldChampionshipITT":
+        return "World Championship ITT";
+      case "EuropeanChampionship":
+        return "European Championship";
+      case "EuropeanChampionshipITT":
+        return "European Championship ITT";
+      case "NationalChampionship":
+        return "National Championship";
+      case "NationalChampionshipITT":
+        return "National Championship ITT";
+
+      // World Tour races
+      case "CWTGTFrance": // Tour de France
+      case "CWTGTAutres": // Giro and Vuelta
+        return "Grand Tour";
+      case "CWTMajeures": // Paris-Roubaix, Liege, etc.
+        return "World Tour Monument";
+      case "CWTAutresClasA": // Strade Bianche, Amstel Gold, etc.
+        return "World Tour Classic A";
+      case "CWTAutresClasB": // Omloop Nieuwsblad and Dwars door Vlaanderen
+        return "World Tour Classic B";
+      case "CWTAutresClasC": // Eschborn-Frankfurt, Brugge-De Panne, and Cadel Evans Great Ocean Road Race
+        return "World Tour Classic C";
+      case "CWTAutresToursA": // Criterium du Dauphine, Tirreno-Adriatico, etc.
+        return "World Tour A";
+      case "CWTAutresToursB": // None currently, but reserved in case for now.
+        return "World Tour B";
+      case "CWTAutresToursC": // UAE Tour and Gree-Tour of Guangxi
+        return "World Tour C";
+
+      // Continental Pro and Continental races
+      case "Cont2HC":
+        return "2.Pro";
+      case "Cont1HC":
+        return "1.Pro";
+      case "Cont12":
+        return "1.2";
+      case "Cont11":
+        return "1.1";
+      case "Cont22":
+        return "2.2";
+      case "Cont21":
+        return "2.1";
+
+      // U23 races
+      case "U23_2NCup":
+        return "U23 Nations' Cup";
+      case "Cont12U":
+        return "1.2 U23";
+      case "Cont22U":
+        return "2.2 U23";
+
+      default:
+        return race.Class;
+    }
+  }
+
+  private static string RaceLabel(pcm_planner.Data.RiderAssignedRace race) => race.Abbreviation;
+
+  private static bool IsWeekend(DateOnly monthStart, int day)
+  {
+    const int CalendarWeekdayReferenceYear = 2024;
+    var referenceDate = new DateOnly(CalendarWeekdayReferenceYear, monthStart.Month, day);
+    return referenceDate.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+  }
+
+  private static List<CalendarMonth> BuildCalendarMonths(List<pcm_planner.Data.RiderAssignedRace>? races,
+                                                         List<pcm_planner.Data.RiderAssignedRace>? allTeamRaces)
+  {
+    if (races == null || allTeamRaces == null || allTeamRaces.Count == 0)
+      return [];
+
+    var first = allTeamRaces.Min(r => r.StartDate);
+    var last = allTeamRaces.Max(r => r.EndDate);
+
+    var cursor = new DateOnly(first.Year, first.Month, 1);
+    var finalMonth = new DateOnly(last.Year, last.Month, 1);
+
+    var months = new List<CalendarMonth>();
+
+    while (cursor <= finalMonth)
+    {
+      var daysInMonth = DateTime.DaysInMonth(cursor.Year, cursor.Month);
+      var monthStart = cursor;
+      var monthEnd = new DateOnly(cursor.Year, cursor.Month, daysInMonth);
+
+      var segments = races
+          .Where(r => r.StartDate <= monthEnd && r.EndDate >= monthStart)
+          .OrderBy(r => r.StartDate)
+          .Select(r =>
+          {
+            var visibleStart = r.StartDate < monthStart ? monthStart : r.StartDate;
+            var visibleEnd = r.EndDate > monthEnd ? monthEnd : r.EndDate;
+
+            var startDay = visibleStart.Day;
+            var span = visibleEnd.Day - visibleStart.Day + 1;
+
+            var background = RaceColour(r);
+            var text = TextColourForBackground(background);
+
+            return new CalendarRaceSegment(
+                      r,
+                      $"{startDay} / span {span}",
+                      background,
+                      text);
+          })
+          .ToList();
+
+      months.Add(new CalendarMonth(cursor, daysInMonth, segments));
+      cursor = cursor.AddMonths(1);
     }
 
-    private static RenderFragment Stat(string label, int? value) => __builder =>
-    {
-        if (value is null) return;
-        <tr>
-            <th scope="row" class="text-nowrap">@label</th>
-            <td class="text-end">@value</td>
-        </tr>;
-    };
+    return months;
+  }
 
-    private static string FormatDates(DateOnly start, DateOnly end)
+  private static string RaceColour(pcm_planner.Data.RiderAssignedRace race)
+  {
+    switch (race.Class)
     {
-        if (start == end)
-            return start.ToString("d MMM yyyy");
-        return $"{start:d MMM yyyy} – {end:d MMM yyyy}";
+      case "CWTGTFrance": // Tour de France
+        return "#EED712";
+
+      case "CWTGTAutres": // Giro and Vuelta
+        if (race.Name.ToLowerInvariant().Contains("giro"))
+          return "#F095BD";
+        else
+          return "#D2722A";
+
+      default:
+        return '#' + race.CalendarColor;
     }
+  }
+
+  private static string TextColourForBackground(string hexColour)
+  {
+    var text = hexColour.TrimStart('#');
+
+    if (text.Length < 6)
+      return "#111";
+
+    var r = Convert.ToInt32(text[..2], 16);
+    var g = Convert.ToInt32(text.Substring(2, 2), 16);
+    var b = Convert.ToInt32(text.Substring(4, 2), 16);
+
+    // Perceived brightness.
+    var brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness >= 150 ? "#111" : "#fff";
+  }
+
+  private sealed record CalendarMonth(
+      DateOnly MonthStart,
+      int DaysInMonth,
+      List<CalendarRaceSegment> Segments);
+
+  private sealed record CalendarRaceSegment(
+      pcm_planner.Data.RiderAssignedRace Race,
+      string GridColumn,
+      string BackgroundColour,
+      string TextColour);
 }
