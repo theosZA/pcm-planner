@@ -37,6 +37,8 @@ public record RaceDetail(
 
 public record SeasonSummary(int Season, int RaceCount, int RiderCount, double AvgRaceDays);
 
+public record RiderCalendarEntry(int RiderId, string DisplayName, List<RiderAssignedRace> Races);
+
 public class RosterService
 {
   private readonly string _connectionString;
@@ -267,6 +269,67 @@ public class RosterService
     }
 
     return new RaceDetail(raceId, name, startDate, endDate, stages, riders);
+  }
+
+  public async Task<List<RiderCalendarEntry>> GetAllRiderCalendarEntriesAsync()
+  {
+    await using var connection = new SqliteConnection(_connectionString);
+    await connection.OpenAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = """
+            SELECT r.id,
+                   r.display_name,
+                   rc.id,
+                   rc.name,
+                   rc.abbreviation,
+                   rc.start_date,
+                   rc.end_date,
+                   COUNT(s.id) AS stage_count,
+                   rc.race_class_constant,
+                   rc.calendar_color
+            FROM rider r
+            JOIN optimise_assignment oa ON oa.rider_id = r.id
+            JOIN race rc ON rc.id = oa.race_id
+            JOIN stage s ON s.race_id = rc.id
+            WHERE oa.run_id = (SELECT MAX(id) FROM optimise_run)
+              AND r.team_id = (SELECT id FROM team WHERE player IS NOT NULL LIMIT 1)
+            GROUP BY r.id, r.display_name, rc.id, rc.name, rc.abbreviation,
+                     rc.start_date, rc.end_date, rc.race_class_constant, rc.calendar_color
+            ORDER BY r.display_name, rc.start_date
+            """;
+
+    var riderMap = new Dictionary<int, (string Name, List<RiderAssignedRace> Races)>();
+    var riderOrder = new List<int>();
+
+    await using var reader = await command.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+    {
+      var riderId = reader.GetInt32(0);
+      var riderName = reader.GetString(1);
+      var startDate = DateOnly.Parse(reader.GetString(5));
+      var endDate = DateOnly.Parse(reader.GetString(6));
+      var race = new RiderAssignedRace(
+          reader.GetInt32(2),
+          reader.GetString(3),
+          reader.IsDBNull(4) ? reader.GetString(3) : reader.GetString(4),
+          startDate,
+          endDate,
+          reader.GetInt32(7),
+          reader.IsDBNull(8) ? "unknown" : reader.GetString(8),
+          reader.IsDBNull(9) ? "B0B0B0" : reader.GetString(9));
+
+      if (!riderMap.ContainsKey(riderId))
+      {
+        riderMap[riderId] = (riderName, []);
+        riderOrder.Add(riderId);
+      }
+      riderMap[riderId].Races.Add(race);
+    }
+
+    return riderOrder
+        .Select(id => new RiderCalendarEntry(id, riderMap[id].Name, riderMap[id].Races))
+        .ToList();
   }
 
   public async Task<SeasonSummary?> GetSeasonSummaryAsync()

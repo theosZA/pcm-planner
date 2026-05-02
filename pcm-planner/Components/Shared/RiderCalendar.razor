@@ -31,8 +31,8 @@
           <a class="calendar-race-block"
               style="grid-column:@segment.GridColumn; background-color:@segment.BackgroundColour; color:@segment.TextColour"
               href="/race/@segment.Race.RaceId"
-              title="@CalendarTooltip(segment.Race)">
-            @RaceLabel(segment.Race)
+              title="@CalendarHelpers.CalendarTooltip(segment.Race)">
+            @CalendarHelpers.RaceLabel(segment.Race)
           </a>
         }
       </div>
@@ -61,7 +61,7 @@
 
   .calendar-month-grid {
       display: grid;
-      grid-template-columns: repeat(var(--days), minmax(16px, 1fr));
+      grid-template-columns: repeat(var(--days), minmax(20px, 1fr));
       grid-template-rows: 1.1rem 1.6rem;
       gap: 2px;
       min-width: 0;
@@ -86,28 +86,7 @@
       background: rgba(0, 0, 0, 0.035);
   }
 
-  .calendar-race-block {
-      grid-row: 2;
-      display: block;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      border-radius: 4px;
-      padding: 0.15rem 0.35rem;
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-align: center;
-      text-decoration: none;
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16);
-  }
-
-  .calendar-race-block:hover {
-      filter: brightness(0.94);
-      text-decoration: none;
-  }
-
-  @@media (max-width: 900px) {
+  @@media
       .calendar-month {
           grid-template-columns: 1fr;
           gap: 0.25rem;
@@ -123,85 +102,6 @@
 @code {
   [Parameter, EditorRequired] public List<RiderAssignedRace>? Races { get; set; }
   [Parameter, EditorRequired] public List<RiderAssignedRace>? AllTeamRaces { get; set; }
-
-  private static string FormatDates(DateOnly start, DateOnly end)
-  {
-    if (start == end)
-      return start.ToString("d MMM yyyy");
-    return $"{start:d MMM yyyy} – {end:d MMM yyyy}";
-  }
-
-  private static string CalendarTooltip(RiderAssignedRace race)
-  {
-    var stageText = race.StageCount == 1 ? "1 stage" : $"{race.StageCount} stages";
-    return $"{RaceLevel(race)} | {race.Name} | {FormatDates(race.StartDate, race.EndDate)} | {stageText}";
-  }
-
-  private static string RaceLevel(RiderAssignedRace race)
-  {
-    switch (race.Class)
-    {
-      // Championships
-      case "WorldChampionship":
-        return "World Championship";
-      case "WorldChampionshipITT":
-        return "World Championship ITT";
-      case "EuropeanChampionship":
-        return "European Championship";
-      case "EuropeanChampionshipITT":
-        return "European Championship ITT";
-      case "NationalChampionship":
-        return "National Championship";
-      case "NationalChampionshipITT":
-        return "National Championship ITT";
-
-      // World Tour races
-      case "CWTGTFrance": // Tour de France
-      case "CWTGTAutres": // Giro and Vuelta
-        return "Grand Tour";
-      case "CWTMajeures": // Paris-Roubaix, Liege, etc.
-        return "World Tour Monument";
-      case "CWTAutresClasA": // Strade Bianche, Amstel Gold, etc.
-        return "World Tour Classic A";
-      case "CWTAutresClasB": // Omloop Nieuwsblad and Dwars door Vlaanderen
-        return "World Tour Classic B";
-      case "CWTAutresClasC": // Eschborn-Frankfurt, Brugge-De Panne, and Cadel Evans Great Ocean Road Race
-        return "World Tour Classic C";
-      case "CWTAutresToursA": // Criterium du Dauphine, Tirreno-Adriatico, etc.
-        return "World Tour A";
-      case "CWTAutresToursB": // None currently, but reserved in case for now.
-        return "World Tour B";
-      case "CWTAutresToursC": // UAE Tour and Gree-Tour of Guangxi
-        return "World Tour C";
-
-      // Continental Pro and Continental races
-      case "Cont2HC":
-        return "2.Pro";
-      case "Cont1HC":
-        return "1.Pro";
-      case "Cont12":
-        return "1.2";
-      case "Cont11":
-        return "1.1";
-      case "Cont22":
-        return "2.2";
-      case "Cont21":
-        return "2.1";
-
-      // U23 races
-      case "U23_2NCup":
-        return "U23 Nations' Cup";
-      case "Cont12U":
-        return "1.2 U23";
-      case "Cont22U":
-        return "2.2 U23";
-
-      default:
-        return race.Class;
-    }
-  }
-
-  private static string RaceLabel(RiderAssignedRace race) => race.Abbreviation;
 
   private static bool IsWeekend(DateOnly monthStart, int day)
   {
@@ -241,8 +141,8 @@
             var startDay = visibleStart.Day;
             var span = visibleEnd.Day - visibleStart.Day + 1;
 
-            var background = RaceColour(r);
-            var text = TextColourForBackground(background);
+            var background = CalendarHelpers.RaceColour(r);
+            var text = CalendarHelpers.TextColourForBackground(background);
 
             return new CalendarRaceSegment(
                       r,
@@ -257,40 +157,6 @@
     }
 
     return months;
-  }
-
-  private static string RaceColour(RiderAssignedRace race)
-  {
-    switch (race.Class)
-    {
-      case "CWTGTFrance": // Tour de France
-        return "#EED712";
-
-      case "CWTGTAutres": // Giro and Vuelta
-        if (race.Name.ToLowerInvariant().Contains("giro"))
-          return "#F095BD";
-        else
-          return "#D2722A";
-
-      default:
-        return '#' + race.CalendarColor;
-    }
-  }
-
-  private static string TextColourForBackground(string hexColour)
-  {
-    var text = hexColour.TrimStart('#');
-
-    if (text.Length < 6)
-      return "#111";
-
-    var r = Convert.ToInt32(text[..2], 16);
-    var g = Convert.ToInt32(text.Substring(2, 2), 16);
-    var b = Convert.ToInt32(text.Substring(4, 2), 16);
-
-    // Perceived brightness.
-    var brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    return brightness >= 150 ? "#111" : "#fff";
   }
 
   private sealed record CalendarMonth(

@@ -1,0 +1,246 @@
+@using pcm_planner.Data
+
+@{
+    var calendar = BuildTeamCalendar(RiderEntries);
+}
+
+@if (calendar is not null)
+{
+  <div class="team-calendar mb-4"
+       style="--total-days:@calendar.TotalDays; --total-riders:@calendar.Riders.Count">
+
+    <div class="team-calendar-names">
+      <div class="team-calendar-name-header"></div>
+
+      @for (var i = 0; i < calendar.Riders.Count; i++)
+      {
+        var rider = calendar.Riders[i];
+        var row = i + 2;
+
+        <div class="team-calendar-rider-name @(i % 2 == 1 ? "team-calendar-row-alt" : null)"
+             style="grid-row:@row">
+          <a href="/rider/@rider.RiderId">@rider.DisplayName</a>
+        </div>
+      }
+    </div>
+
+    <div class="team-calendar-scroll">
+      <div class="team-calendar-grid">
+
+        @for (var i = 0; i < calendar.Months.Count; i++)
+        {
+          var month = calendar.Months[i];
+
+          <div class="team-calendar-month-header @(i % 2 == 0 ? "team-calendar-month-blue" : "team-calendar-month-violet")"
+               style="grid-row:1; grid-column:@month.StartColumn / span @month.DaysInMonth">
+            @month.Name
+          </div>
+        }
+
+        @for (var i = 0; i < calendar.Riders.Count; i++)
+        {
+          var rider = calendar.Riders[i];
+          var row = i + 2;
+
+          @if (i % 2 == 1)
+          {
+            <div class="team-calendar-row-shade"
+                 style="grid-row:@row; grid-column:1 / -1"></div>
+          }
+
+          @foreach (var segment in rider.Segments)
+          {
+            <a class="calendar-race-block"
+               style="grid-row:@row; grid-column:@segment.GridColumn; background-color:@segment.BackgroundColour; color:@segment.TextColour"
+               href="/race/@segment.Race.RaceId"
+               title="@CalendarHelpers.CalendarTooltip(segment.Race)">
+              @CalendarHelpers.RaceLabel(segment.Race)
+            </a>
+          }
+        }
+
+      </div>
+    </div>
+  </div>
+}
+
+<style>
+  .team-calendar {
+    --calendar-day-width: 16px;
+    --calendar-header-height: 1.1rem;
+    --calendar-row-height: 1.2rem;
+    --calendar-row-gap: 2px;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    contain: inline-size;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
+  }
+
+  .team-calendar-names {
+    display: grid;
+    grid-template-rows: var(--calendar-header-height) repeat(var(--total-riders), var(--calendar-row-height));
+    row-gap: var(--calendar-row-gap);
+    width: max-content;
+    max-width: max-content;
+    background: white;
+    z-index: 1;
+  }
+
+  .team-calendar-scroll {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .team-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--total-days), var(--calendar-day-width));
+    grid-template-rows: var(--calendar-header-height) repeat(var(--total-riders), var(--calendar-row-height));
+    column-gap: 2px;
+    row-gap: var(--calendar-row-gap);
+    width: max-content;
+    min-width: max-content;
+  }
+
+  .team-calendar-name-header {
+    grid-row: 1;
+  }
+
+  .team-calendar-month-header {
+    grid-row: 1;
+    font-size: 0.65rem;
+    line-height: var(--calendar-header-height);
+    font-weight: 600;
+    color: #444;
+    text-align: center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    border-left: 1px solid rgba(0, 0, 0, 0.08);
+    border-right: 1px solid rgba(0, 0, 0, 0.04);
+    box-sizing: border-box;
+  }
+
+  .team-calendar-month-blue {
+    background: #eaf4ff;
+  }
+
+  .team-calendar-month-violet {
+    background: #f1ecff;
+  }
+
+  .team-calendar-rider-name {
+    font-size: 0.75rem;
+    line-height: var(--calendar-row-height);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 0.45rem;
+    display: flex;
+    align-items: center;
+    background: white;
+  }
+
+    .team-calendar-rider-name.team-calendar-row-alt {
+      background: #f9f9f9;
+    }
+
+    .team-calendar-rider-name a {
+      text-decoration: none;
+      color: inherit;
+    }
+
+      .team-calendar-rider-name a:hover {
+        text-decoration: underline;
+      }
+
+  .team-calendar-row-shade {
+    background: rgba(0, 0, 0, 0.025);
+    pointer-events: none;
+  }
+
+  .calendar-race-block {
+    font-size: 0.65rem;
+    line-height: var(--calendar-row-height);
+    padding: 0 2px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-decoration: none;
+  }
+
+</style>
+
+@code {
+    [Parameter, EditorRequired] public List<RiderCalendarEntry>? RiderEntries { get; set; }
+
+    private sealed record TeamCalendarData(
+        int TotalDays,
+        List<TeamCalendarMonth> Months,
+        List<TeamCalendarRider> Riders);
+
+    private sealed record TeamCalendarMonth(string Name, int StartColumn, int DaysInMonth);
+
+    private sealed record TeamCalendarRider(
+        int RiderId,
+        string DisplayName,
+        List<CalendarRaceSegment> Segments);
+
+    private sealed record CalendarRaceSegment(
+        RiderAssignedRace Race,
+        string GridColumn,
+        string BackgroundColour,
+        string TextColour);
+
+    private static TeamCalendarData? BuildTeamCalendar(List<RiderCalendarEntry>? entries)
+    {
+        if (entries is null || entries.Count == 0) return null;
+
+        var allRaces = entries.SelectMany(e => e.Races).ToList();
+        if (allRaces.Count == 0) return null;
+
+        // Always start from Jan 1 of the current year.
+        var firstDate = new DateOnly(allRaces.Min(r => r.StartDate).Year, 1, 1);
+        // And end on the last day of the month in which we have a race.
+        var lastDate = allRaces.Max(r => r.EndDate);
+        var endDate = new DateOnly(lastDate.Year, lastDate.Month, DateTime.DaysInMonth(lastDate.Year, lastDate.Month));
+        var totalDays = endDate.DayOfYear;  // days from Jan 1 inclusive
+
+        // Build month headers (column 1 = rider name, so day 1 of year = column 2)
+        var months = new List<TeamCalendarMonth>();
+        var cursor = firstDate;
+        while (cursor <= endDate)
+        {
+            var daysInMonth = DateTime.DaysInMonth(cursor.Year, cursor.Month);
+            var startCol = cursor.DayOfYear;
+            var visibleDays = Math.Min(daysInMonth, endDate.DayOfYear - cursor.DayOfYear + 1);
+            months.Add(new TeamCalendarMonth(cursor.ToString("MMMM"), startCol, visibleDays));
+            cursor = cursor.AddMonths(1);
+        }
+
+        // Build one row per rider
+        var riders = entries.Select(entry =>
+        {
+            var segments = entry.Races.Select(r =>
+            {
+                var startCol = r.StartDate.DayOfYear;
+                var span = r.EndDate.DayOfYear - r.StartDate.DayOfYear + 1;
+                var bg = CalendarHelpers.RaceColour(r);
+                var text = CalendarHelpers.TextColourForBackground(bg);
+                return new CalendarRaceSegment(r, $"{startCol} / span {span}", bg, text);
+            }).ToList();
+            return new TeamCalendarRider(entry.RiderId, entry.DisplayName, segments);
+        }).ToList();
+
+        return new TeamCalendarData(totalDays, months, riders);
+    }
+}

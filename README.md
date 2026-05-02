@@ -32,9 +32,13 @@ The `optimise` package can:
 
 The `pcm-planner` Blazor Server web app can:
 
+- Show a full-team calendar on the home page: a scrollable grid with one row per rider, day-accurate race blocks across the whole season, month headers, and alternating row shading.
+- Show a per-rider calendar on each rider page: a month-by-month horizontal bar view with the rider's races highlighted against the full season span, with weekend shading.
+- Colour-code race blocks by race class (Grand Tour yellow/pink/orange, Monument by base-game colour, etc.) with automatic light/dark text contrast.
+- Show a tooltip on every race block with the race level, name, dates, and stage count.
 - Display all races from the latest optimisation run in a chronological table, with links to race detail pages.
 - Show a race detail page listing the assigned riders and, for multi-stage races, each stage's terrain and type (ITT/TTT).
-- Show a rider detail page with age, all stats, and the rider's assigned race list.
+- Show a rider detail page with age, full stat table, a per-rider calendar, and the assigned race list.
 - List every roster rider in the sidebar navigation with their total assigned race days.
 - Show a season summary header (season year, race count, rider count, average race days per rider).
 - Read everything directly from the planner SQLite database via `RosterService` (no separate API layer).
@@ -200,11 +204,19 @@ A Blazor Server application that visualises the latest optimisation result from 
 
 | Page | Route | Description |
 |---|---|---|
-| All Races | `/` | Chronological table of all races in the latest optimisation run, with links to individual race pages. |
+| Home | `/` | Full-team calendar grid followed by a chronological race list. |
 | Race detail | `/race/{id}` | Assigned riders and (for multi-stage races) a stage list showing terrain and type (ITT/TTT). |
-| Rider detail | `/rider/{id}` | Rider age, full stat table, and assigned race list with dates. |
+| Rider detail | `/rider/{id}` | Rider age, full stat table, per-rider calendar, and assigned race list. |
 
 The sidebar navigation lists every roster rider with their total assigned race days. A header bar shows the season year, race count, rider count, and average race days per rider.
+
+### Calendars
+
+The **team calendar** (`TeamCalendar`) is a CSS-grid layout spanning from 1 January to the end of the last race month. Each row is a rider; each column is one day. Month headers alternate between two background tints. Rider names are in a sticky-ish left panel; the day grid scrolls horizontally on narrow viewports.
+
+The **rider calendar** (`RiderCalendar`) breaks the season into one row per month, with day-of-month labels and weekend column shading. Only months that contain at least one team race are shown, so the view is never padded with empty months.
+
+Both calendars share the same race-block styling and colouring logic (`CalendarHelpers`): race class drives the background colour (Grand Tours get fixed brand colours; other races use their PCM `calendar_color` value), and perceived brightness determines whether the label text is dark or white. Hovering a block shows a tooltip with race level, name, date range, and stage count.
 
 ### Prerequisites
 
@@ -227,15 +239,19 @@ pcm-planner/
   Program.cs                   Application entry point and DI registration.
   Data/
     RosterService.cs           All DB queries; returns typed records to Razor components.
+    CalendarHelpers.cs         Shared calendar utilities: race colouring, tooltips, labels.
   Components/
     Layout/
       MainLayout.razor         Shell layout with sidebar and header.
       NavMenu.razor            Sidebar — rider list with race day counts.
       SeasonSummary.razor      Header bar — season stats summary.
     Pages/
-      Home.razor               All-races list (route: /).
+      Home.razor               Team calendar + race list (route: /).
       Race.razor               Race detail (route: /race/{id}).
-      Rider.razor              Rider detail (route: /rider/{id}).
+      Rider.razor              Rider detail with per-rider calendar (route: /rider/{id}).
+    Shared/
+      TeamCalendar.razor       Full-team season calendar grid (one row per rider).
+      RiderCalendar.razor      Per-rider month-by-month bar calendar.
 ```
 
 ---
@@ -327,7 +343,7 @@ Each step should be easy to validate before moving on:
 4. ~~Run a simple optimiser.~~ ✓
 5. ~~Save optimisation results.~~ ✓
 6. ~~View the plan in the web app.~~ ✓
-7. Improve the UI.
+7. ~~Improve the UI.~~ ✓
 8. Iterate on optimisation quality.
 
 The guiding principle is to keep each step small enough that we can tell whether it worked.
