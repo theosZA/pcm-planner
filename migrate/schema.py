@@ -18,6 +18,7 @@ DROP_SQL = """
 PRAGMA foreign_keys = OFF;
 
 DROP TABLE IF EXISTS optimise_assignment;
+DROP TABLE IF EXISTS optimise_race;
 DROP TABLE IF EXISTS optimise_run;
 DROP TABLE IF EXISTS stage;
 DROP TABLE IF EXISTS team_race_entry;
@@ -296,6 +297,17 @@ CREATE TABLE IF NOT EXISTS optimise_run (
     solver_status TEXT NOT NULL,
     objective_value INTEGER NOT NULL,
     time_limit_seconds REAL  -- NULL means no limit was set
+);
+
+CREATE TABLE IF NOT EXISTS optimise_race (
+    id INTEGER PRIMARY KEY,
+    run_id INTEGER NOT NULL,
+    race_id INTEGER NOT NULL,
+    squad_profile TEXT NOT NULL,
+    stage_value INTEGER NOT NULL,
+    FOREIGN KEY (run_id) REFERENCES optimise_run(id),
+    FOREIGN KEY (race_id) REFERENCES race(id),
+    UNIQUE (run_id, race_id)
 );
 
 CREATE TABLE IF NOT EXISTS optimise_assignment (

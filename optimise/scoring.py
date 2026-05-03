@@ -28,7 +28,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Optional
 
-from optimise.model import PlannerData, Rider, Stage
+from optimise.model import PlannerData, Race, RaceClass, Rider, SquadProfile, Stage
 
 # Map (stage_type, relief) → Rider attribute name.
 # TimeTrial/TeamTimeTrial always map to "time_trial" regardless of relief.
@@ -42,33 +42,33 @@ _RELIEF_STAT: dict[str, str] = {
 }
 
 # UCI points for winning the race (or a stage, for stage races), keyed by
-# race_class_constant.  Used as a score multiplier so prestige is reflected
-# in the objective.  Unmapped levels default to 1.
-RACE_LEVEL_MULTIPLIER: dict[str, int] = {
-    "WorldChampionship":       90,
-    "WorldChampionshipITT":    45,
-    "EuropeanChampionship":    25,
-    "EuropeanChampionshipITT": 7,
-    "NationalChampionship":    10,
-    "NationalChampionshipITT": 5,
-    "CWTGTFrance":             21,
-    "CWTGTAutres":             11,
-    "CWTMajeures":             80,
-    "CWTAutresClasA":          50,
-    "CWTAutresClasB":          40,
-    "CWTAutresClasC":          30,
-    "CWTAutresToursA":         6,
-    "CWTAutresToursB":         5,
-    "CWTAutresToursC":         4,
-    "Cont2HC":                 3,
-    "Cont21":                  2,
-    "Cont22":                  1,
-    "Cont1HC":                 20,
-    "Cont11":                  12,
-    "Cont12":                  4,
-    "U23_2NCup":               5,
-    "Cont12U":                 3,
-    "Cont22U":                 1,
+# RaceClass enum member.  Used as a score multiplier so prestige is reflected
+# in the objective.  Unmapped/unknown race classes default to 1.
+RACE_LEVEL_MULTIPLIER: dict[RaceClass, int] = {
+    RaceClass.WORLD_CHAMPIONSHIP:        90,
+    RaceClass.WORLD_CHAMPIONSHIP_ITT:    45,
+    RaceClass.EUROPEAN_CHAMPIONSHIP:     25,
+    RaceClass.EUROPEAN_CHAMPIONSHIP_ITT: 7,
+    RaceClass.NATIONAL_CHAMPIONSHIP:     10,
+    RaceClass.NATIONAL_CHAMPIONSHIP_ITT: 5,
+    RaceClass.TOUR_DE_FRANCE:            21,
+    RaceClass.OTHER_GRAND_TOUR:          11,
+    RaceClass.MONUMENT:                  80,
+    RaceClass.WORLD_TOUR_CLASSIC_A:      50,
+    RaceClass.WORLD_TOUR_CLASSIC_B:      40,
+    RaceClass.WORLD_TOUR_CLASSIC_C:      30,
+    RaceClass.WORLD_TOUR_STAGE_RACE_A:   6,
+    RaceClass.WORLD_TOUR_STAGE_RACE_B:   5,
+    RaceClass.WORLD_TOUR_STAGE_RACE_C:   4,
+    RaceClass.CONTINENTAL_2_PRO:         3,
+    RaceClass.CONTINENTAL_2_1:           2,
+    RaceClass.CONTINENTAL_2_2:           1,
+    RaceClass.CONTINENTAL_1_PRO:         20,
+    RaceClass.CONTINENTAL_1_1:           12,
+    RaceClass.CONTINENTAL_1_2:           4,
+    RaceClass.U23_NATIONS_CUP:           5,
+    RaceClass.CONTINENTAL_1_2_U23:       3,
+    RaceClass.CONTINENTAL_2_2_U23:       1,
 }
 
 
@@ -106,6 +106,51 @@ def score_rider_for_race(
     return total * level_multiplier
 
 
+def classify_squad_profile(race: Race, stages: list[Stage]) -> SquadProfile:
+    """Return the squad profile for *race*.
+
+    Multi-stage races always use ``SquadProfile.STAGE_RACE``.  For single-stage classics:
+
+    - Any TT or team TT stage → ``SquadProfile.TIME_TRIAL``
+    - Flat or Hill relief     → ``SquadProfile.SPRINT``
+    - Medium Mountain or Mountain relief → ``SquadProfile.CLIMBING``
+
+    Falls back to ``SquadProfile.SPRINT`` when terrain data is absent.
+    """
+    if race.is_stage_race:
+        return SquadProfile.STAGE_RACE
+    for stage in stages:
+        if stage.stage_type in _TT_TYPES:
+            return SquadProfile.TIME_TRIAL
+    for stage in stages:
+        if stage.relief in {"Flat", "Hill"}:
+            return SquadProfile.SPRINT
+        if stage.relief in {"Medium Mountain", "Mountain"}:
+            return SquadProfile.CLIMBING
+    return SquadProfile.SPRINT
+
+
+def build_race_profiles(data: PlannerData) -> dict[int, tuple[SquadProfile, int]]:
+    """Return ``{race_id: (squad_profile, stage_value)}`` for every race in *data*.
+
+    ``stage_value`` is the per-stage prestige multiplier from
+    ``RACE_LEVEL_MULTIPLIER`` (defaults to 1 for unmapped levels).
+    """
+    race_ids = {r.id for r in data.races}
+    stages_by_race: dict[int, list[Stage]] = defaultdict(list)
+    for stage in data.stages:
+        if stage.race_id in race_ids:
+            stages_by_race[stage.race_id].append(stage)
+
+    return {
+        race.id: (
+            classify_squad_profile(race, stages_by_race.get(race.id, [])),
+            RACE_LEVEL_MULTIPLIER.get(race.race_class, 1),
+        )
+        for race in data.races
+    }
+
+
 def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], int]:
     """Return rider × race scores for all (rider, race) pairs in *data*.
 
@@ -127,7 +172,7 @@ def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], int]:
     for rider in data.riders:
         for race in data.races:
             stages = stages_by_race.get(race.id, [])
-            multiplier = RACE_LEVEL_MULTIPLIER.get(race.level, 1)
+            multiplier = RACE_LEVEL_MULTIPLIER.get(race.race_class, 1)
             matrix[(rider.id, race.id)] = score_rider_for_race(rider, stages, multiplier)
 
     return matrix

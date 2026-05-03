@@ -103,6 +103,8 @@ def main() -> None:
           f"({len(data.riders)} riders × {len(data.races)} races)")
     print()
 
+    race_profiles = scoring.build_race_profiles(data)
+
     # --- Validation checks ----------------------------------------------------
     print("Validation:")
     results = constraints.run_all_checks(data)
@@ -152,7 +154,7 @@ def main() -> None:
         print(f"  {rider.display_name:<30} {days:>4}  {zone}")
 
     # --- Persist to database --------------------------------------------------
-    run_id = db.save_result(conn, result, args.time_limit)
+    run_id = db.save_result(conn, result, args.time_limit, race_profiles)
     print()
     print(f"Assignments saved to database (optimise_run.id = {run_id}).")
 

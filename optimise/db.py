@@ -15,18 +15,21 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from optimise.model import PlannerData, Race, Rider, Stage
+from optimise.model import PlannerData, Race, RaceClass, Rider, Stage
 
 
 def save_result(
     conn: sqlite3.Connection,
     result: "SolveResult",
     time_limit: float | None,
+    race_profiles: "dict[int, tuple[str, int]] | None" = None,
 ) -> int:
     """Persist a solve result to the database.
 
-    Inserts one row into ``optimise_run`` and one row per assigned (rider, race)
-    pair into ``optimise_assignment``.  Returns the new run ID.
+    Inserts one row into ``optimise_run``, one row per (race) into
+    ``optimise_race`` (when *race_profiles* is provided), and one row per
+    assigned (rider, race) pair into ``optimise_assignment``.
+    Returns the new run ID.
 
     The tables are created by the migrate schema; if they don't exist yet,
     an informative error will be raised.
@@ -41,6 +44,18 @@ def save_result(
         (result.status, result.objective_value, time_limit),
     )
     run_id = cur.lastrowid
+
+    if race_profiles:
+        conn.executemany(
+            """
+            INSERT INTO optimise_race (run_id, race_id, squad_profile, stage_value)
+            VALUES (?, ?, ?, ?);
+            """,
+            [
+                (run_id, race_id, profile.value, value)
+                for race_id, (profile, value) in race_profiles.items()
+            ],
+        )
 
     conn.executemany(
         """
@@ -172,7 +187,8 @@ def _load_races(conn: sqlite3.Connection) -> list[Race]:
             COALESCE(race.race_days, 0) AS race_days,
             COALESCE(race.rider_capacity, 0) AS rider_capacity,
             COALESCE(race.is_stage_race, 0) AS is_stage_race,
-            tre.invitation_state_id
+            tre.invitation_state_id,
+            race.race_class_constant
         FROM race
         JOIN team_race_entry tre ON tre.race_id = race.id
         JOIN team t ON t.id = tre.team_id
@@ -196,6 +212,7 @@ def _load_races(conn: sqlite3.Connection) -> list[Race]:
             rider_capacity=row["rider_capacity"],
             is_stage_race=bool(row["is_stage_race"]),
             invitation_state_id=row["invitation_state_id"],
+            race_class=RaceClass.from_raw(row["race_class_constant"]),
         )
         for row in rows
     ]

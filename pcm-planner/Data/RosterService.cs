@@ -33,7 +33,9 @@ public record RaceDetail(
     DateOnly StartDate,
     DateOnly EndDate,
     List<RaceStage> Stages,
-    List<RaceRider> Riders);
+    List<RaceRider> Riders,
+    int? StageValue,
+    string? SquadProfile);
 
 public record SeasonSummary(int Season, int RaceCount, int RiderCount, double AvgRaceDays);
 
@@ -268,7 +270,26 @@ public class RosterService
       riders.Add(new RaceRider(ridersReader.GetInt32(0), ridersReader.GetString(1)));
     }
 
-    return new RaceDetail(raceId, name, startDate, endDate, stages, riders);
+    // Optimiser values from latest run
+    await using var optimiseCmd = connection.CreateCommand();
+    optimiseCmd.CommandText = """
+            SELECT stage_value, squad_profile
+            FROM optimise_race
+            WHERE race_id = @raceId
+              AND run_id = (SELECT MAX(id) FROM optimise_run)
+            """;
+    optimiseCmd.Parameters.AddWithValue("@raceId", raceId);
+
+    int? stageValue = null;
+    string? squadProfile = null;
+    await using var optimiseReader = await optimiseCmd.ExecuteReaderAsync();
+    if (await optimiseReader.ReadAsync())
+    {
+      stageValue = optimiseReader.IsDBNull(0) ? null : optimiseReader.GetInt32(0);
+      squadProfile = optimiseReader.IsDBNull(1) ? null : optimiseReader.GetString(1);
+    }
+
+    return new RaceDetail(raceId, name, startDate, endDate, stages, riders, stageValue, squadProfile);
   }
 
   public async Task<List<RiderCalendarEntry>> GetAllRiderCalendarEntriesAsync()

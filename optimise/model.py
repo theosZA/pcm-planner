@@ -15,8 +15,57 @@ the optimisation logic. Nothing in this module touches the database directly.
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass, field
 from typing import Optional
+
+
+class RaceClass(enum.Enum):
+    """PCM race-class constants, mapping clean names to raw DB strings."""
+
+    WORLD_CHAMPIONSHIP        = "WorldChampionship"
+    WORLD_CHAMPIONSHIP_ITT    = "WorldChampionshipITT"
+    EUROPEAN_CHAMPIONSHIP     = "EuropeanChampionship"
+    EUROPEAN_CHAMPIONSHIP_ITT = "EuropeanChampionshipITT"
+    NATIONAL_CHAMPIONSHIP     = "NationalChampionship"
+    NATIONAL_CHAMPIONSHIP_ITT = "NationalChampionshipITT"
+    TOUR_DE_FRANCE            = "CWTGTFrance"
+    OTHER_GRAND_TOUR          = "CWTGTAutres"    # Giro and Vuelta
+    MONUMENT                  = "CWTMajeures"
+    WORLD_TOUR_CLASSIC_A      = "CWTAutresClasA"
+    WORLD_TOUR_CLASSIC_B      = "CWTAutresClasB"
+    WORLD_TOUR_CLASSIC_C      = "CWTAutresClasC"
+    WORLD_TOUR_STAGE_RACE_A   = "CWTAutresToursA"
+    WORLD_TOUR_STAGE_RACE_B   = "CWTAutresToursB"
+    WORLD_TOUR_STAGE_RACE_C   = "CWTAutresToursC"
+    CONTINENTAL_2_PRO         = "Cont2HC"
+    CONTINENTAL_2_1           = "Cont21"
+    CONTINENTAL_2_2           = "Cont22"
+    CONTINENTAL_1_PRO         = "Cont1HC"
+    CONTINENTAL_1_1           = "Cont11"
+    CONTINENTAL_1_2           = "Cont12"
+    U23_NATIONS_CUP           = "U23_2NCup"
+    CONTINENTAL_1_2_U23       = "Cont12U"
+    CONTINENTAL_2_2_U23       = "Cont22U"
+
+    @classmethod
+    def from_raw(cls, raw: str | None) -> RaceClass | None:
+        """Parse a raw PCM constant string, returning None for unknown values."""
+        if raw is None:
+            return None
+        try:
+            return cls(raw)
+        except ValueError:
+            return None
+
+
+class SquadProfile(enum.Enum):
+    """The type of squad to select for a race, derived from its terrain profile."""
+
+    TIME_TRIAL  = "time_trial"
+    SPRINT      = "sprint"
+    CLIMBING    = "climbing"
+    STAGE_RACE  = "stage_race"
 
 
 @dataclass
@@ -68,6 +117,7 @@ class Race:
     rider_capacity: int         # squad size required (from race class max_riders)
     is_stage_race: bool
     invitation_state_id: int    # see team_race_entry.invitation_state_id
+    race_class: RaceClass | None = None  # None for unrecognised race classes
 
 
 @dataclass

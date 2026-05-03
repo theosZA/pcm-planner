@@ -13,6 +13,20 @@ else
     <h1>@race.Name</h1>
     <p class="text-muted mb-4">@FormatDates(race.StartDate, race.EndDate)</p>
 
+    @if (race.StageValue is not null || race.SquadProfile is not null)
+    {
+        <div class="mb-3 d-flex gap-4">
+            @if (race.StageValue is not null)
+            {
+                <span><strong>Stage value:</strong> @race.StageValue</span>
+            }
+            @if (race.SquadProfile is not null)
+            {
+                <span><strong>Squad profile:</strong> @race.SquadProfile</span>
+            }
+        </div>
+    }
+
     <div class="row g-4">
         <div class="col-auto">
             <h2>Riders</h2>
