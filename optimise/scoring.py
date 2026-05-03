@@ -28,7 +28,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Optional
 
-from optimise.model import PlannerData, Race, RaceClass, Rider, SquadProfile, Stage
+from optimise.model import PlannerData, Race, RaceClass, Rider, RiderRole, SquadProfile, Stage
 
 # Map (stage_type, relief) → Rider attribute name.
 # TimeTrial/TeamTimeTrial always map to "time_trial" regardless of relief.
@@ -84,25 +84,53 @@ def _stage_stat_name(stage: Stage) -> Optional[str]:
     return None
 
 
+def _role_stat(rider: Rider, role: RiderRole) -> int:
+    """Return the integer role-fitness stat for *rider* in *role*.
+
+    Uses integer division throughout so the result is always an int.
+    Stats default to 0 when absent.
+    """
+    def s(attr: str) -> int:
+        return getattr(rider, attr, None) or 0
+
+    if role == RiderRole.DOMESTIQUE:
+        return s("flat") // 2 + s("hill") // 2
+    if role == RiderRole.FREE:
+        return s("baroudeur") // 2 + s("stamina") // 2
+    if role == RiderRole.SPRINT_LEAD:
+        return s("sprint") * 2 // 3 + s("acceleration") // 3
+    if role == RiderRole.SPRINT_LEADOUT:
+        return s("sprint")
+    if role == RiderRole.CLIMBING_LEAD:
+        return s("stamina") // 2 + s("mountain") // 6 + s("medium_mountain") // 6 + s("hill") // 6
+    if role == RiderRole.CLIMBING_DOMESTIQUE:
+        return s("mountain") // 3 + s("medium_mountain") // 3 + s("hill") // 3
+    if role == RiderRole.TIME_TRIAL:
+        return s("time_trial") * 4 // 5 + s("resistance") // 5
+    return 0
+
+
 def score_rider_for_race(
     rider: Rider,
     stages: list[Stage],
+    role: RiderRole,
     level_multiplier: int = 1,
 ) -> int:
-    """Return the integer score for *rider* across the terrain of *stages*.
+    """Return the integer score for *rider* in *role* across the terrain of *stages*.
 
-    The score is the sum of the rider's relevant stat for each stage that has
-    recognisable terrain data, multiplied by *level_multiplier* (the race
-    prestige weight derived from ``RACE_LEVEL_MULTIPLIER``).  Stages with
-    missing or unrecognised terrain contribute 0.  Returns 0 if there are no
-    scorable stages.
+    Per stage the score is the terrain stat plus the role-fitness stat for the
+    rider, multiplied by *level_multiplier*.  Stages with missing or
+    unrecognised terrain contribute only the role stat.  Returns 0 if there
+    are no stages.
     """
+    if not stages:
+        return 0
+    role_contribution = _role_stat(rider, role)
     total = 0
     for stage in stages:
         stat_name = _stage_stat_name(stage)
-        if stat_name is None:
-            continue
-        total += getattr(rider, stat_name, None) or 0
+        terrain = (getattr(rider, stat_name, None) or 0) if stat_name else 0
+        total += terrain + role_contribution
     return total * level_multiplier
 
 
@@ -151,14 +179,11 @@ def build_race_profiles(data: PlannerData) -> dict[int, tuple[SquadProfile, int]
     }
 
 
-def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], int]:
-    """Return rider × race scores for all (rider, race) pairs in *data*.
+def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int, RiderRole], int]:
+    """Return rider × race × role scores for all combinations in *data*.
 
-    Keys are ``(rider.id, race.id)``; values are integer sums of rider stats
-    across each stage's relevant terrain stat.
-
-    Only races that appear in ``data.races`` are included (i.e., races the
-    player's team is actively entered in, already filtered by invitation state).
+    Keys are ``(rider.id, race.id, role)``; values are the integer score for
+    that rider filling that role in that race.
     """
     race_ids = {r.id for r in data.races}
 
@@ -168,11 +193,14 @@ def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], int]:
         if stage.race_id in race_ids:
             stages_by_race[stage.race_id].append(stage)
 
-    matrix: dict[tuple[int, int], int] = {}
+    matrix: dict[tuple[int, int, RiderRole], int] = {}
     for rider in data.riders:
         for race in data.races:
             stages = stages_by_race.get(race.id, [])
             multiplier = RACE_LEVEL_MULTIPLIER.get(race.race_class, 1)
-            matrix[(rider.id, race.id)] = score_rider_for_race(rider, stages, multiplier)
+            for role in RiderRole:
+                matrix[(rider.id, race.id, role)] = score_rider_for_race(
+                    rider, stages, role, multiplier
+                )
 
     return matrix

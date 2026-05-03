@@ -16,7 +16,8 @@ import sys
 from pathlib import Path
 
 from optimise import constraints, db, scoring, solver
-from optimise.model import RaceDayPenalties
+from optimise.model import RaceDayPenalties, RiderRole
+from optimise.squad_config import SQUAD_COMPOSITIONS
 
 
 def main() -> None:
@@ -99,15 +100,34 @@ def main() -> None:
 
     # --- Scoring matrix -------------------------------------------------------
     matrix = scoring.build_scoring_matrix(data)
-    print(f"Rider-race scores computed: {len(matrix)} pairs "
-          f"({len(data.riders)} riders × {len(data.races)} races)")
+    print(f"Rider-race-role scores computed: {len(matrix)} triples "
+          f"({len(data.riders)} riders × {len(data.races)} races × {len(RiderRole)} roles)")
     print()
 
     race_profiles = scoring.build_race_profiles(data)
 
+    # --- Squad compositions ---------------------------------------------------
+    race_map = {r.id: r for r in data.races}
+    compositions: dict[int, dict] = {}
+    print("Squad compositions:")
+    col_name = 42
+    for race_id, (profile, _stage_value) in race_profiles.items():
+        race = race_map[race_id]
+        composition = SQUAD_COMPOSITIONS.get((profile, race.rider_capacity))
+        profile_label = profile.value
+        if composition is None:
+            roles_str = "(no composition defined)"
+        else:
+            compositions[race_id] = composition
+            roles_str = "  ".join(
+                f"{count}× {role.value}" for role, count in composition.items()
+            )
+        print(f"  {race.name:<{col_name}} [{profile_label}]  {roles_str}")
+    print()
+
     # --- Validation checks ----------------------------------------------------
     print("Validation:")
-    results = constraints.run_all_checks(data)
+    results = constraints.run_all_checks(data, race_profiles)
     for result in results:
         print(f"  {result}")
 
@@ -118,7 +138,7 @@ def main() -> None:
     print()
     time_limit_msg = f"{args.time_limit}s" if args.time_limit is not None else "none"
     print(f"Solving…  (time limit: {time_limit_msg})")
-    result = solver.solve(data, matrix, time_limit=args.time_limit, penalties=penalties)
+    result = solver.solve(data, matrix, compositions, time_limit=args.time_limit, penalties=penalties)
     print(f"  Status:      {result.status}")
     print(f"  Objective:   {result.objective_value:,}  (scores minus race-day penalties)")
     print(f"  Assignments: {result.total_assignments}  "
@@ -140,8 +160,8 @@ def main() -> None:
     for rider in sorted(data.riders, key=lambda r: r.display_name):
         days = sum(
             race_days_map[race_id]
-            for (rid, race_id), assigned_flag in result.assigned.items()
-            if rid == rider.id and assigned_flag
+            for rid, race_id in result.race_assignments
+            if rid == rider.id
         )
         if days < p.target_min:
             zone = f"under  ({days - p.target_min:+d} vs target)"

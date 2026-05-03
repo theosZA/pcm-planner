@@ -1,21 +1,18 @@
 """
 CP-SAT optimisation model for the PCM Season Planner.
 
-Builds and solves a CP-SAT model where each (rider, race) pair has a boolean
-decision variable representing whether that rider is selected for that race.
+Builds and solves a CP-SAT model where each (rider, race, role) triple has a
+boolean decision variable representing whether that rider fills that role in
+that race.
 
 The objective is to maximise the total score — the sum of each boolean
-multiplied by the pre-calculated terrain-suitability score for that pair.
-
-At this stage NO constraints are added beyond the implicit [0, 1] domain of
-each boolean, so the solver will (predictably) assign every rider to every
-race.  Constraints will be layered on top in subsequent iterations.
+multiplied by the pre-calculated terrain-suitability score for the
+(rider, race) pair.
 
 Public API
 ----------
 SolveResult  — dataclass returned by solve()
-solve(data, matrix)  → SolveResult
-"""
+solve(data, matrix, compositions)  → SolveResult"""
 # Note: scores from scoring.py are already integers, so no scaling is needed.
 
 from __future__ import annotations
@@ -24,7 +21,7 @@ from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
 
-from optimise.model import PlannerData, Race, RaceDayPenalties, Rider
+from optimise.model import PlannerData, Race, RaceDayPenalties, Rider, RiderRole
 
 
 def find_overlapping_pairs(races: list[Race]) -> list[tuple[Race, Race]]:
@@ -53,17 +50,23 @@ class SolveResult:
 
     status: str                                 # "OPTIMAL", "FEASIBLE", "INFEASIBLE", …
     objective_value: int                        # sum of integer rider-race scores
-    assigned: dict[tuple[int, int], bool] = field(default_factory=dict)
-    # assigned[(rider.id, race.id)] = True/False
+    assigned: dict[tuple[int, int, RiderRole], bool] = field(default_factory=dict)
+    # assigned[(rider.id, race.id, role)] = True/False
+
+    @property
+    def race_assignments(self) -> set[tuple[int, int]]:
+        """Set of (rider_id, race_id) pairs where any role was assigned."""
+        return {(rider_id, race_id) for (rider_id, race_id, _), v in self.assigned.items() if v}
 
     @property
     def total_assignments(self) -> int:
-        return sum(1 for v in self.assigned.values() if v)
+        return len(self.race_assignments)
 
 
 def solve(
     data: PlannerData,
     matrix: dict[tuple[int, int], int],
+    compositions: dict[int, dict[RiderRole, int]],
     time_limit: float | None = None,
     penalties: RaceDayPenalties | None = None,
 ) -> SolveResult:
@@ -76,6 +79,9 @@ def solve(
     matrix:
         Pre-calculated integer score for each (rider.id, race.id) pair, as
         returned by ``scoring.build_scoring_matrix(data)``.
+    compositions:
+        Role breakdown for each race: ``{race_id: {role: count}}``, as
+        resolved from ``SQUAD_COMPOSITIONS``.
     penalties:
         Race-day band penalty config.  If None, default values are used.
 
@@ -88,21 +94,28 @@ def solve(
 
     model = cp_model.CpModel()
 
-    # --- Decision variables: one boolean per (rider, race) pair ---------------
-    assigned: dict[tuple[int, int], cp_model.IntVar] = {}
+    # --- Decision variables: one boolean per (rider, race, role) triple -------
+    role_assigned: dict[tuple[int, int, RiderRole], cp_model.IntVar] = {}
     for rider in data.riders:
         for race in data.races:
-            assigned[(rider.id, race.id)] = model.new_bool_var(
-                f"assign_r{rider.id}_race{race.id}"
-            )
+            if race.id not in compositions:
+                continue
+            for role in compositions[race.id]:
+                role_assigned[(rider.id, race.id, role)] = model.new_bool_var(
+                    f"role_r{rider.id}_race{race.id}_{role.value}"
+                )
 
-    # --- Objective: maximise sum of score × boolean, minus race-day penalties --
-    # Scores are already integers, so they can be used directly as coefficients.
+    # --- Objective: maximise sum of score × role booleans, minus penalties ----
+    # Each role var for (rider, race, role) uses the role-specific terrain score.
     objective_terms = []
-    for (rider_id, race_id), var in assigned.items():
-        coeff = matrix.get((rider_id, race_id), 0)
-        if coeff:
-            objective_terms.append(coeff * var)
+    for rider in data.riders:
+        for race in data.races:
+            if race.id not in compositions:
+                continue
+            for role in compositions[race.id]:
+                coeff = matrix.get((rider.id, race.id, role), 0)
+                if coeff:
+                    objective_terms.append(coeff * role_assigned[(rider.id, race.id, role)])
 
     # Piecewise-linear race-day penalties, modelled with auxiliary IntVars.
     # For rider with total_days d:
@@ -113,7 +126,10 @@ def solve(
     p = penalties
     for rider in data.riders:
         total_days = sum(
-            race.race_days * assigned[(rider.id, race.id)] for race in data.races
+            race.race_days * role_assigned[(rider.id, race.id, role)]
+            for race in data.races
+            if race.id in compositions
+            for role in compositions[race.id]
         )
 
         under_min = model.new_int_var(0, p.target_min, f"under_min_r{rider.id}")
@@ -140,18 +156,35 @@ def solve(
 
     # --- Constraints ----------------------------------------------------------
 
-    # Each race gets at most rider_capacity riders.
-    race_map = {r.id: r for r in data.races}
+    # Each rider can fill at most one role per race.
+    for rider in data.riders:
+        for race in data.races:
+            if race.id not in compositions:
+                continue
+            model.add(
+                sum(role_assigned[(rider.id, race.id, role)] for role in compositions[race.id])
+                <= 1
+            )
+
+    # Each role slot in a race has a capacity limit from the squad composition.
     for race in data.races:
-        model.add(
-            sum(assigned[(rider.id, race.id)] for rider in data.riders)
-            <= race_map[race.id].rider_capacity
-        )
+        if race.id not in compositions:
+            continue
+        for role, capacity in compositions[race.id].items():
+            model.add(
+                sum(role_assigned[(rider.id, race.id, role)] for rider in data.riders)
+                <= capacity
+            )
 
     # Each rider can race at most absolute_max days across the whole season.
     for rider in data.riders:
         model.add(
-            sum(race.race_days * assigned[(rider.id, race.id)] for race in data.races)
+            sum(
+                race.race_days * role_assigned[(rider.id, race.id, role)]
+                for race in data.races
+                if race.id in compositions
+                for role in compositions[race.id]
+            )
             <= penalties.absolute_max
         )
 
@@ -161,9 +194,10 @@ def solve(
 
     for rider in data.riders:
         for a, b in overlapping_pairs:
-            model.add(
-                assigned[(rider.id, a.id)] + assigned[(rider.id, b.id)] <= 1
-            )
+            a_vars = [role_assigned[(rider.id, a.id, role)] for role in compositions.get(a.id, {})]
+            b_vars = [role_assigned[(rider.id, b.id, role)] for role in compositions.get(b.id, {})]
+            if a_vars and b_vars:
+                model.add(sum(a_vars) + sum(b_vars) <= 1)
 
     # --- Solve ----------------------------------------------------------------
     solver = cp_model.CpSolver()
@@ -172,10 +206,10 @@ def solve(
     status_code = solver.solve(model)
     status = solver.status_name(status_code)
 
-    result_assigned: dict[tuple[int, int], bool] = {}
+    result_assigned: dict[tuple[int, int, RiderRole], bool] = {}
     if status_code in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for (rider_id, race_id), var in assigned.items():
-            result_assigned[(rider_id, race_id)] = bool(solver.value(var))
+        for key, var in role_assigned.items():
+            result_assigned[key] = bool(solver.value(var))
         objective = int(solver.objective_value)
     else:
         objective = 0

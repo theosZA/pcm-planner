@@ -21,11 +21,12 @@ public record RiderAssignedRace(
     DateOnly EndDate,
     int StageCount,
     string Class,
-    string CalendarColor);
+    string CalendarColor,
+    string? Role);
 
 public record RaceStage(int StageNumber, string? Relief, string? StageType);
 
-public record RaceRider(int Id, string DisplayName);
+public record RaceRider(int Id, string DisplayName, string? Role);
 
 public record RaceDetail(
     int Id,
@@ -40,6 +41,16 @@ public record RaceDetail(
 public record SeasonSummary(int Season, int RaceCount, int RiderCount, double AvgRaceDays);
 
 public record RiderCalendarEntry(int RiderId, string DisplayName, List<RiderAssignedRace> Races);
+
+public static class RosterHelpers
+{
+  public static string? FormatRole(string? role)
+  {
+    if (role is null) return null;
+    var formatted = role.Replace('_', ' ');
+    return char.ToUpper(formatted[0]) + formatted[1..];
+  }
+}
 
 public class RosterService
 {
@@ -99,7 +110,8 @@ public class RosterService
           endDate,
           reader.GetInt32(5),
           reader.IsDBNull(6) ? "unknown" : reader.GetString(6),
-          reader.IsDBNull(7) ? "B0B0B0" : reader.GetString(7)));
+          reader.IsDBNull(7) ? "B0B0B0" : reader.GetString(7),
+          null));
     }
     return races;
   }
@@ -178,13 +190,14 @@ public class RosterService
                    rc.end_date,
                    COUNT(s.id) AS stage_count,
                    rc.race_class_constant,
-                   rc.calendar_color
+                   rc.calendar_color,
+                   oa.rider_role
             FROM race rc
             JOIN optimise_assignment oa ON oa.race_id = rc.id
             JOIN stage s ON s.race_id = rc.id
             WHERE oa.rider_id = @riderId
               AND oa.run_id = (SELECT MAX(id) FROM optimise_run)
-            GROUP BY rc.id, rc.name, rc.abbreviation, rc.start_date, rc.end_date, rc.level, rc.calendar_color
+            GROUP BY rc.id, rc.name, rc.abbreviation, rc.start_date, rc.end_date, rc.level, rc.calendar_color, oa.rider_role
             ORDER BY rc.start_date
             """;
     command.Parameters.AddWithValue("@riderId", riderId);
@@ -203,7 +216,8 @@ public class RosterService
           endDate,
           reader.GetInt32(5),
           reader.IsDBNull(6) ? "unknown" : reader.GetString(6),
-          reader.IsDBNull(7) ? "B0B0B0" : reader.GetString(7)));
+          reader.IsDBNull(7) ? "B0B0B0" : reader.GetString(7),
+          reader.IsDBNull(8) ? null : reader.GetString(8)));
     }
     return races;
   }
@@ -254,7 +268,7 @@ public class RosterService
     // Riders assigned from latest optimise run
     await using var ridersCmd = connection.CreateCommand();
     ridersCmd.CommandText = """
-            SELECT r.id, r.display_name
+            SELECT r.id, r.display_name, oa.rider_role
             FROM rider r
             JOIN optimise_assignment oa ON oa.rider_id = r.id
             WHERE oa.race_id = @raceId
@@ -267,7 +281,10 @@ public class RosterService
     await using var ridersReader = await ridersCmd.ExecuteReaderAsync();
     while (await ridersReader.ReadAsync())
     {
-      riders.Add(new RaceRider(ridersReader.GetInt32(0), ridersReader.GetString(1)));
+      riders.Add(new RaceRider(
+          ridersReader.GetInt32(0),
+          ridersReader.GetString(1),
+          ridersReader.IsDBNull(2) ? null : ridersReader.GetString(2)));
     }
 
     // Optimiser values from latest run
@@ -338,7 +355,8 @@ public class RosterService
           endDate,
           reader.GetInt32(7),
           reader.IsDBNull(8) ? "unknown" : reader.GetString(8),
-          reader.IsDBNull(9) ? "B0B0B0" : reader.GetString(9));
+          reader.IsDBNull(9) ? "B0B0B0" : reader.GetString(9),
+          null);
 
       if (!riderMap.ContainsKey(riderId))
       {

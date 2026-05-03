@@ -39,7 +39,13 @@ else
                 <ul class="list-unstyled">
                     @foreach (var rider in race.Riders)
                     {
-                        <li><a href="/rider/@rider.Id">@rider.DisplayName</a></li>
+                        <li>
+                            <a href="/rider/@rider.Id">@rider.DisplayName</a>
+                            @if (pcm_planner.Data.RosterHelpers.FormatRole(rider.Role) is { } role)
+                            {
+                                <span class="text-muted ms-1">(@role)</span>
+                            }
+                        </li>
                     }
                 </ul>
             }

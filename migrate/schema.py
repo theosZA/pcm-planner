@@ -315,6 +315,7 @@ CREATE TABLE IF NOT EXISTS optimise_assignment (
     run_id INTEGER NOT NULL,
     rider_id INTEGER NOT NULL,
     race_id INTEGER NOT NULL,
+    rider_role TEXT NOT NULL,
     FOREIGN KEY (run_id) REFERENCES optimise_run(id),
     FOREIGN KEY (rider_id) REFERENCES rider(id),
     FOREIGN KEY (race_id) REFERENCES race(id),

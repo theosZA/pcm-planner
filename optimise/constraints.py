@@ -20,7 +20,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from optimise.model import PlannerData
+from optimise.model import PlannerData, RiderRole, SquadProfile
+from optimise.squad_config import SQUAD_COMPOSITIONS
 
 
 @dataclass
@@ -104,11 +105,47 @@ def check_aggregate_feasibility(data: PlannerData) -> CheckResult:
     )
 
 
-def run_all_checks(data: PlannerData) -> list[CheckResult]:
+def check_races_have_squad_composition(
+    data: PlannerData,
+    race_profiles: dict[int, tuple[SquadProfile, int]],
+) -> CheckResult:
+    """Fail if any race lacks a squad composition for its (profile, capacity) pair.
+
+    Races without a composition cannot be included in the solve, so this check
+    catches missing config entries before the solver runs.
+    """
+    missing: list[str] = []
+    for race in data.races:
+        if race.rider_capacity == 0:
+            continue  # already caught by check_races_have_stage_data
+        profile, _ = race_profiles.get(race.id, (None, None))
+        if profile is None:
+            continue
+        if (profile, race.rider_capacity) not in SQUAD_COMPOSITIONS:
+            missing.append(
+                f"{race.abbreviation or race.name} "
+                f"({profile.value}, {race.rider_capacity} riders)"
+            )
+
+    if missing:
+        return CheckResult(
+            False,
+            f"{len(missing)} race(s) missing a squad composition: {', '.join(missing)}",
+        )
+    return CheckResult(True, "All races have a squad composition defined.")
+
+
+def run_all_checks(
+    data: PlannerData,
+    race_profiles: dict[int, tuple[SquadProfile, int]] | None = None,
+) -> list[CheckResult]:
     """Run all validation checks in order and return the full list of results."""
-    return [
+    checks = [
         check_riders_present(data),
         check_races_present(data),
         check_races_have_stage_data(data),
         check_aggregate_feasibility(data),
     ]
+    if race_profiles is not None:
+        checks.append(check_races_have_squad_composition(data, race_profiles))
+    return checks

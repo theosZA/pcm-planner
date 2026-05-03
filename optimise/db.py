@@ -59,12 +59,12 @@ def save_result(
 
     conn.executemany(
         """
-        INSERT INTO optimise_assignment (run_id, rider_id, race_id)
-        VALUES (?, ?, ?);
+        INSERT INTO optimise_assignment (run_id, rider_id, race_id, rider_role)
+        VALUES (?, ?, ?, ?);
         """,
         [
-            (run_id, rider_id, race_id)
-            for (rider_id, race_id), assigned_flag in result.assigned.items()
+            (run_id, rider_id, race_id, role.value)
+            for (rider_id, race_id, role), assigned_flag in result.assigned.items()
             if assigned_flag
         ],
     )

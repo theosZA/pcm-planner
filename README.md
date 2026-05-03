@@ -25,10 +25,12 @@ The `migrate` package can:
 The `optimise` package can:
 
 - Load riders, races, and stage terrain data from the planner database.
-- Pre-calculate a terrain-suitability score (integer sum of relevant rider stats across all stages) for every rider × race pair.
-- Solve a CP-SAT optimisation model (Google OR-Tools) that maximises total score subject to hard constraints.
-- Save every solve result — status, objective, and the full rider–race assignment — to the database.
-- Print a season summary, validation checks, and a per-rider race-days bar chart to the console.
+- Classify each race into a **squad profile** (sprint, climbing, time trial, or stage race) based on its stage terrain data.
+- Resolve the **squad composition** for each race from a config file that maps (profile, squad size) → role breakdown.
+- Pre-calculate a terrain-and-role-suitability score for every rider × race × role triple.
+- Solve a CP-SAT optimisation model (Google OR-Tools) that assigns each rider to a specific role in each race, maximising total score subject to hard constraints.
+- Save every solve result — status, objective, the full rider–race–role assignment, and per-race squad profile metadata — to the database.
+- Print a season summary, validation checks, squad compositions, and a per-rider race-days summary to the console.
 
 The `pcm-planner` Blazor Server web app can:
 
@@ -140,19 +142,59 @@ migrate/
 
 The `optimise` package reads the planner database and assigns riders to races using a CP-SAT integer programming model (Google OR-Tools).
 
-Scoring is based on stage terrain: for each stage in a race, the rider's relevant stat is summed (Flat → `flat`, Hill → `hill`, Medium Mountain → `medium_mountain`, Mountain → `mountain`, time trials → `time_trial`). No averaging is applied; longer and harder races naturally score higher.
+### Squad profiles and role-based scoring
+
+Before solving, every race is classified into one of four **squad profiles**:
+
+| Profile | When assigned |
+|---|---|
+| `time_trial` | The race has a time trial or team time trial stage |
+| `sprint` | Single-day classic with Flat or Hill terrain |
+| `climbing` | Single-day classic with Medium Mountain or Mountain terrain |
+| `stage_race` | Any multi-stage race |
+
+The profile and the race's squad size together determine the **squad composition**: how many riders fill each role. Compositions are configured in `optimise/squad_config.py`:
+
+```python
+# Keys:   (SquadProfile, rider_capacity)
+# Values: {RiderRole: count}  — must sum to rider_capacity
+SQUAD_COMPOSITIONS: dict[tuple[SquadProfile, int], dict[RiderRole, int]] = {
+    (SquadProfile.SPRINT, 7): {
+        RiderRole.SPRINT_LEAD:    1,
+        RiderRole.SPRINT_LEADOUT: 2,
+        RiderRole.DOMESTIQUE:     3,
+        RiderRole.FREE:           1,
+    },
+    # ... add entries for every (profile, size) combination in your calendar
+}
+```
+
+Scoring is now per (rider, race, role) triple. Each stage contributes a **terrain stat** (as before) plus a **role-fitness stat** that rewards the right kind of rider for each role:
+
+| Role | Stat formula |
+|---|---|
+| `domestique` | `flat÷2 + hill÷2` |
+| `free` | `baroudeur÷2 + stamina÷2` |
+| `sprint_lead` | `sprint×2÷3 + acceleration÷3` |
+| `sprint_leadout` | `sprint` |
+| `climbing_lead` | `stamina÷2 + mountain÷6 + medium_mountain÷6 + hill÷6` |
+| `climbing_domestique` | `mountain÷3 + medium_mountain÷3 + hill÷3` |
+| `time_trial` | `time_trial×4÷5 + resistance÷5` |
+
+The solver assigns each rider to **exactly one role** per race they attend, subject to role-capacity limits from the squad composition.
 
 Hard constraints currently enforced:
 
 | Constraint | Detail |
 |---|---|
-| Squad size | Each race gets at most `rider_capacity` riders |
+| Role capacity | Each role slot in a race is filled at most as many times as the composition allows |
+| One role per rider per race | A rider may fill at most one role in any given race |
 | Season cap | No rider may exceed 75 race days |
 | No overlap | A rider cannot be assigned to two races whose date ranges intersect |
 
 National championship races are excluded from optimisation (they are heavily overlapping single-day events that the scheduler handles separately).
 
-Each solve result is written to the database (`optimise_run` and `optimise_assignment` tables), so results are queryable and can be served by a future web viewer.
+Each solve result is written to the database (`optimise_run`, `optimise_race`, and `optimise_assignment` tables). `optimise_race` stores the squad profile and stage-value multiplier for each race. `optimise_assignment` stores the assigned rider, race, and role so results are fully queryable.
 
 ### Prerequisites
 
@@ -187,10 +229,13 @@ Add `--time-limit 30` to cap the solver at 30 seconds and get a fast feasible re
 optimise/
   __init__.py       Package marker.
   model.py          Data classes: Rider, Race, Stage, PlannerData.
-  db.py             Read-only DB access (load_planner_data) + save_result() for writing.
-  scoring.py        Terrain → stat mapping; build_scoring_matrix() returns dict[(rider_id, race_id), int].
-  constraints.py    Pre-solve feasibility checks (rider count, race data, aggregate days).
-  solver.py         CP-SAT model: variables, objective, constraints, solve().
+                    Enums: RaceClass, SquadProfile, RiderRole.
+  db.py             DB access: load_planner_data() + save_result() (writes run, race, and assignment rows).
+  scoring.py        Terrain → stat mapping; role-fitness formulas; build_scoring_matrix() returns
+                    dict[(rider_id, race_id, RiderRole), int]; classify_squad_profile(); build_race_profiles().
+  squad_config.py   SQUAD_COMPOSITIONS config: maps (SquadProfile, squad_size) → {RiderRole: count}.
+  constraints.py    Pre-solve feasibility checks (rider count, race data, aggregate days, squad compositions).
+  solver.py         CP-SAT model: (rider, race, role) variables, objective, constraints, solve().
   __main__.py       CLI entry point — run with python -m optimise.
 ```
 
@@ -205,10 +250,12 @@ A Blazor Server application that visualises the latest optimisation result from 
 | Page | Route | Description |
 |---|---|---|
 | Home | `/` | Full-team calendar grid followed by a chronological race list. |
-| Race detail | `/race/{id}` | Assigned riders and (for multi-stage races) a stage list showing terrain and type (ITT/TTT). |
-| Rider detail | `/rider/{id}` | Rider age, full stat table, per-rider calendar, and assigned race list. |
+| Race detail | `/race/{id}` | Squad profile, stage value, assigned riders with their roles, and (for multi-stage races) a stage list showing terrain and type (ITT/TTT). |
+| Rider detail | `/rider/{id}` | Rider age, full stat table, per-rider calendar, a role-breakdown summary table (role → total days), and the full assigned race list with role per race. |
 
 The sidebar navigation lists every roster rider with their total assigned race days. A header bar shows the season year, race count, rider count, and average race days per rider.
+
+Rider roles are displayed throughout the app. On the race detail page each assigned rider is shown with their role in parentheses. On the rider detail page a role-breakdown table summarises total days per role across the season, and the race list includes a Role column. Role strings are formatted from snake_case to title case by `RosterHelpers.FormatRole`.
 
 ### Calendars
 
@@ -239,6 +286,9 @@ pcm-planner/
   Program.cs                   Application entry point and DI registration.
   Data/
     RosterService.cs           All DB queries; returns typed records to Razor components.
+                               Key records: RaceDetail (includes StageValue, SquadProfile, List<RaceRider> with Role),
+                               RiderAssignedRace (includes Role), RiderCalendarEntry.
+    RosterHelpers.cs           FormatRole(): converts snake_case role strings to Title Case.
     CalendarHelpers.cs         Shared calendar utilities: race colouring, tooltips, labels.
   Components/
     Layout/
@@ -247,8 +297,10 @@ pcm-planner/
       SeasonSummary.razor      Header bar — season stats summary.
     Pages/
       Home.razor               Team calendar + race list (route: /).
-      Race.razor               Race detail (route: /race/{id}).
-      Rider.razor              Rider detail with per-rider calendar (route: /rider/{id}).
+      Race.razor               Race detail: squad profile, stage value, riders with roles,
+                               and stage list (route: /race/{id}).
+      Rider.razor              Rider detail: stat table, calendar, role-breakdown summary,
+                               and race list with role column (route: /rider/{id}).
     Shared/
       TeamCalendar.razor       Full-team season calendar grid (one row per rider).
       RiderCalendar.razor      Per-rider month-by-month bar calendar.
@@ -285,10 +337,10 @@ It will include:
 The initial optimiser will answer only one question:
 
 ```text
-Is rider X competing in race Y?
+Which role does rider X fill in race Y?
 ```
 
-It will not yet handle rider roles, race objectives, fitness peaks, training camps, or manual UI-based edits.
+It will not yet handle race objectives, fitness peaks, training camps, or manual UI-based edits.
 
 ## Initial optimisation rules
 
@@ -296,7 +348,7 @@ The first optimisation model will be intentionally basic.
 
 Hard constraints:
 
-* Each race must have exactly the required number of riders.
+* Each race must have the right number of riders filling each role (per the squad composition).
 * No rider may exceed 75 race days.
 * A rider cannot be assigned to overlapping races.
 * Race overlaps are calculated using full race start/end dates, not individual stage dates.

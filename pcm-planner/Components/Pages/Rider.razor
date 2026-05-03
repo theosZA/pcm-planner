@@ -51,12 +51,33 @@ else
   }
   else
   {
+    <h3>Role breakdown</h3>
+    <table class="table table-sm table-bordered w-auto mb-4">
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th class="text-end">Days</th>
+        </tr>
+      </thead>
+      <tbody>
+        @foreach (var (role, days) in RoleBreakdown)
+        {
+          <tr>
+            <td>@role</td>
+            <td class="text-end">@days</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <h3>Races</h3>
     <table class="table table-striped">
       <thead>
         <tr>
           <th>Race</th>
           <th>Date</th>
           <th class="text-end">Stages</th>
+          <th>Role</th>
         </tr>
       </thead>
       <tbody>
@@ -66,6 +87,7 @@ else
             <td><a href="/race/@race.RaceId">@race.Name</a></td>
             <td>@FormatDates(race.StartDate, race.EndDate)</td>
             <td class="text-end">@(race.StageCount > 1 ? race.StageCount.ToString() : "")</td>
+            <td>@pcm_planner.Data.RosterHelpers.FormatRole(race.Role)</td>
           </tr>
         }
       </tbody>
@@ -88,6 +110,13 @@ else
     races = await RosterService.GetRiderAssignedRacesAsync(RiderId);
     allTeamRaces = await RosterService.GetAllAssignedRacesAsync();
   }
+
+  private IEnumerable<(string Role, int Days)> RoleBreakdown =>
+    races?
+      .GroupBy(r => pcm_planner.Data.RosterHelpers.FormatRole(r.Role) ?? "Unknown")
+      .Select(g => (Role: g.Key, Days: g.Sum(r => r.StageCount)))
+      .OrderByDescending(x => x.Days)
+    ?? Enumerable.Empty<(string, int)>();
 
   private static RenderFragment Stat(string label, int? value) => __builder =>
   {

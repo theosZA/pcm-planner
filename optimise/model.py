@@ -68,6 +68,18 @@ class SquadProfile(enum.Enum):
     STAGE_RACE  = "stage_race"
 
 
+class RiderRole(enum.Enum):
+    """The role a rider fills within a race squad."""
+
+    DOMESTIQUE          = "domestique"
+    FREE                = "free"
+    SPRINT_LEAD         = "sprint_lead"
+    SPRINT_LEADOUT      = "sprint_leadout"
+    CLIMBING_LEAD       = "climbing_lead"
+    CLIMBING_DOMESTIQUE = "climbing_domestique"
+    TIME_TRIAL          = "time_trial"
+
+
 @dataclass
 class Stage:
     """A single stage imported for a race, carrying terrain metadata."""
