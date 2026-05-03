@@ -41,6 +41,36 @@ _RELIEF_STAT: dict[str, str] = {
     "Mountain": "mountain",
 }
 
+# UCI points for winning the race (or a stage, for stage races), keyed by
+# race_class_constant.  Used as a score multiplier so prestige is reflected
+# in the objective.  Unmapped levels default to 1.
+RACE_LEVEL_MULTIPLIER: dict[str, int] = {
+    "WorldChampionship":       90,
+    "WorldChampionshipITT":    45,
+    "EuropeanChampionship":    25,
+    "EuropeanChampionshipITT": 7,
+    "NationalChampionship":    10,
+    "NationalChampionshipITT": 5,
+    "CWTGTFrance":             21,
+    "CWTGTAutres":             11,
+    "CWTMajeures":             80,
+    "CWTAutresClasA":          50,
+    "CWTAutresClasB":          40,
+    "CWTAutresClasC":          30,
+    "CWTAutresToursA":         6,
+    "CWTAutresToursB":         5,
+    "CWTAutresToursC":         4,
+    "Cont2HC":                 3,
+    "Cont21":                  2,
+    "Cont22":                  1,
+    "Cont1HC":                 20,
+    "Cont11":                  12,
+    "Cont12":                  4,
+    "U23_2NCup":               5,
+    "Cont12U":                 3,
+    "Cont22U":                 1,
+}
+
 
 def _stage_stat_name(stage: Stage) -> Optional[str]:
     """Return the Rider attribute name that best describes the stage demands.
@@ -54,12 +84,18 @@ def _stage_stat_name(stage: Stage) -> Optional[str]:
     return None
 
 
-def score_rider_for_race(rider: Rider, stages: list[Stage]) -> int:
+def score_rider_for_race(
+    rider: Rider,
+    stages: list[Stage],
+    level_multiplier: int = 1,
+) -> int:
     """Return the integer score for *rider* across the terrain of *stages*.
 
     The score is the sum of the rider's relevant stat for each stage that has
-    recognisable terrain data.  Stages with missing or unrecognised terrain
-    contribute 0.  Returns 0 if there are no scorable stages.
+    recognisable terrain data, multiplied by *level_multiplier* (the race
+    prestige weight derived from ``RACE_LEVEL_MULTIPLIER``).  Stages with
+    missing or unrecognised terrain contribute 0.  Returns 0 if there are no
+    scorable stages.
     """
     total = 0
     for stage in stages:
@@ -67,7 +103,7 @@ def score_rider_for_race(rider: Rider, stages: list[Stage]) -> int:
         if stat_name is None:
             continue
         total += getattr(rider, stat_name, None) or 0
-    return total
+    return total * level_multiplier
 
 
 def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], int]:
@@ -91,6 +127,7 @@ def build_scoring_matrix(data: PlannerData) -> dict[tuple[int, int], int]:
     for rider in data.riders:
         for race in data.races:
             stages = stages_by_race.get(race.id, [])
-            matrix[(rider.id, race.id)] = score_rider_for_race(rider, stages)
+            multiplier = RACE_LEVEL_MULTIPLIER.get(race.level, 1)
+            matrix[(rider.id, race.id)] = score_rider_for_race(rider, stages, multiplier)
 
     return matrix
