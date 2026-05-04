@@ -29,6 +29,7 @@ from pathlib import Path
 from migrate.parsing import (
     clean_text,
     clean_variant_name,
+    load_country_iso_lookup,
     normalise_level_from_race_class,
     parse_xml_rows,
     read_player_team,
@@ -216,6 +217,8 @@ def import_races_for_team_entries(
     """
     count = 0
 
+    country_lookup = load_country_iso_lookup(lachis_export)
+
     for row in parse_xml_rows(lachis_export / "STA_race.xml", "STA_race"):
         source_race_id = to_int(row.get("IDrace"))
         if source_race_id is None or source_race_id not in race_ids:
@@ -247,6 +250,9 @@ def import_races_for_team_entries(
         race_type_id = race_type_row[0] if race_type_row else None
         race_type_constant = race_type_row[1] if race_type_row else ""
 
+        source_country_id = to_int(row.get("fkIDcountry"))
+        country = country_lookup.get(source_country_id) if source_country_id is not None else None
+
         conn.execute(
             """
             INSERT INTO race (
@@ -256,9 +262,9 @@ def import_races_for_team_entries(
                 source_first_stage_id, source_last_stage_id, number_stages_declared,
                 rider_capacity, level,
                 race_class_constant, race_type_constant, calendar_color, is_stage_race,
-                selected
+                selected, country
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source_race_id) DO UPDATE SET
                 name = excluded.name,
                 abbreviation = excluded.abbreviation,
@@ -279,7 +285,8 @@ def import_races_for_team_entries(
                 race_type_constant = excluded.race_type_constant,
                 calendar_color = excluded.calendar_color,
                 is_stage_race = excluded.is_stage_race,
-                selected = excluded.selected;
+                selected = excluded.selected,
+                country = excluded.country;
             """,
             (
                 source_race_id,
@@ -303,6 +310,7 @@ def import_races_for_team_entries(
                 calendar_color,
                 is_stage_race,
                 to_bool_int(row.get("gene_b_selected")),
+                country,
             ),
         )
         count += 1

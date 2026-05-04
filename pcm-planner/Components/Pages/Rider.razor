@@ -1,7 +1,7 @@
 @page "/rider/{RiderId:int}"
 @using pcm_planner.Components.Shared
 @rendermode InteractiveServer
-@inject pcm_planner.Data.RosterService RosterService
+@inject Data.RosterService RosterService
 
 <PageTitle>@(rider?.DisplayName ?? "Rider")</PageTitle>
 
@@ -11,7 +11,13 @@
 }
 else
 {
-  <h1>@rider.DisplayName</h1>
+  <h1 class="flag-with-name">
+    @if (rider.Country is not null)
+    {
+      <CountryFlag Alpha3Code="@rider.Country" />
+    }
+    <span>@rider.DisplayName</span>
+  </h1>
 
   <dl class="row mb-4">
     @if (rider.Age is not null)
@@ -87,7 +93,7 @@ else
             <td><a href="/race/@race.RaceId">@race.Name</a></td>
             <td>@FormatDates(race.StartDate, race.EndDate)</td>
             <td class="text-end">@(race.StageCount > 1 ? race.StageCount.ToString() : "")</td>
-            <td>@pcm_planner.Data.RosterHelpers.FormatRole(race.Role)</td>
+            <td>@Data.RosterHelpers.FormatRole(race.Role)</td>
           </tr>
         }
       </tbody>
@@ -100,9 +106,9 @@ else
 @code {
   [Parameter] public int RiderId { get; set; }
 
-  private pcm_planner.Data.RiderDetail? rider;
-  private List<pcm_planner.Data.RiderAssignedRace>? races;
-  private List<pcm_planner.Data.RiderAssignedRace>? allTeamRaces;
+  private Data.RiderDetail? rider;
+  private List<Data.RiderAssignedRace>? races;
+  private List<Data.RiderAssignedRace>? allTeamRaces;
 
   protected override async Task OnInitializedAsync()
   {
@@ -113,7 +119,7 @@ else
 
   private IEnumerable<(string Role, int Days)> RoleBreakdown =>
     races?
-      .GroupBy(r => pcm_planner.Data.RosterHelpers.FormatRole(r.Role) ?? "Unknown")
+      .GroupBy(r => Data.RosterHelpers.FormatRole(r.Role) ?? "Unknown")
       .Select(g => (Role: g.Key, Days: g.Sum(r => r.StageCount)))
       .OrderByDescending(x => x.Days)
     ?? Enumerable.Empty<(string, int)>();

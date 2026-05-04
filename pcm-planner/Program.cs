@@ -1,5 +1,5 @@
+using Data;
 using pcm_planner.Components;
-using pcm_planner.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,13 +8,14 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddScoped<RosterService>();
+builder.Services.AddSingleton<FlagService>();
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+  app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
 
 

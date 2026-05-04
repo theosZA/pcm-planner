@@ -1,5 +1,5 @@
 @rendermode InteractiveServer
-@inject pcm_planner.Data.RosterService RosterService
+@inject Data.RosterService RosterService
 
 @if (summary is not null)
 {
@@ -10,7 +10,7 @@
 }
 
 @code {
-    private pcm_planner.Data.SeasonSummary? summary;
+    private Data.SeasonSummary? summary;
 
     protected override async Task OnInitializedAsync()
     {

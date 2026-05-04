@@ -1,0 +1,18 @@
+﻿@using Data
+@inject FlagService Flags
+
+@if (FlagInfo is not null)
+{
+  <img src="@FlagInfo.FlagSvgUrl"
+       alt="@FlagInfo.FlagAltText"
+       title="@FlagInfo.CountryName"
+       class="country-flag @CssClass"
+       loading="lazy" />
+}
+
+@code {
+  [Parameter] public string? Alpha3Code { get; set; }
+  [Parameter] public string? CssClass { get; set; }
+
+  private FlagInfo? FlagInfo => Flags.GetFlagInfo(Alpha3Code);
+}

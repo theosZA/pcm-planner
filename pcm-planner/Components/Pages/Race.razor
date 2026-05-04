@@ -1,6 +1,7 @@
 @page "/race/{RaceId:int}"
+@using pcm_planner.Components.Shared
 @rendermode InteractiveServer
-@inject pcm_planner.Data.RosterService RosterService
+@inject Data.RosterService RosterService
 
 <PageTitle>@(race?.Name ?? "Race")</PageTitle>
 
@@ -10,7 +11,13 @@
 }
 else
 {
-    <h1>@race.Name</h1>
+    <h1 class="flag-with-name">
+      @if (race.Country is not null)
+      {
+        <CountryFlag Alpha3Code="@race.Country" />
+      }
+      <span>@race.Name</span>
+    </h1>
     <p class="text-muted mb-4">@FormatDates(race.StartDate, race.EndDate)</p>
 
     @if (race.StageValue is not null || race.SquadProfile is not null)
@@ -41,7 +48,7 @@ else
                     {
                         <li>
                             <a href="/rider/@rider.Id">@rider.DisplayName</a>
-                            @if (pcm_planner.Data.RosterHelpers.FormatRole(rider.Role) is { } role)
+                            @if (Data.RosterHelpers.FormatRole(rider.Role) is { } role)
                             {
                                 <span class="text-muted ms-1">(@role)</span>
                             }
@@ -83,7 +90,7 @@ else
 @code {
     [Parameter] public int RaceId { get; set; }
 
-    private pcm_planner.Data.RaceDetail? race;
+    private Data.RaceDetail? race;
 
     protected override async Task OnInitializedAsync()
     {

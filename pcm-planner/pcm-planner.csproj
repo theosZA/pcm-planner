@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.7" />
+    <PackageReference Include="Nager.Country" Version="4.6.1" />
   </ItemGroup>
 
 </Project>

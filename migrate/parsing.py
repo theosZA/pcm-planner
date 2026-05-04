@@ -261,6 +261,44 @@ def read_player_team(lachis_export: Path) -> tuple[int, str]:
     raise ValueError("No active player row found in GAM_user.xml")
 
 
+def load_country_iso_lookup(lachis_export: Path) -> dict[int, str]:
+    """Build a mapping from country ID to ISO country code (lowercase).
+
+    Reads STA_country.xml and returns dict[country_id, iso_code] where
+    iso_code is the CONSTANT field normalised to lowercase.
+    """
+    country_to_iso: dict[int, str] = {}
+    for row in parse_xml_rows(lachis_export / "STA_country.xml", "STA_country"):
+        country_id = to_int(row.get("IDcountry"))
+        iso_code = clean_text(row.get("CONSTANT")).lower()
+        if country_id is not None and iso_code:
+            country_to_iso[country_id] = iso_code
+    return country_to_iso
+
+
+def load_country_lookup(lachis_export: Path) -> dict[int, str]:
+    """Build a mapping from region ID to ISO country code (lowercase).
+
+    Reads STA_region.xml to map region_id → country_id, then uses
+    load_country_iso_lookup for country_id → iso_code. Returns a combined
+    dict[region_id, iso_code].
+    """
+    country_to_iso = load_country_iso_lookup(lachis_export)
+
+    region_to_country: dict[int, int] = {}
+    for row in parse_xml_rows(lachis_export / "STA_region.xml", "STA_region"):
+        region_id = to_int(row.get("IDregion"))
+        country_id = to_int(row.get("fkIDcountry"))
+        if region_id is not None and country_id is not None:
+            region_to_country[region_id] = country_id
+
+    return {
+        region_id: country_to_iso[country_id]
+        for region_id, country_id in region_to_country.items()
+        if country_id in country_to_iso
+    }
+
+
 def calculate_age_from_birthdate(
     birthdate_raw: Optional[int],
     game_date: Optional[datetime.date],

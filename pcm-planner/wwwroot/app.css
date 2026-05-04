@@ -79,3 +79,18 @@ h1:focus {
     filter: brightness(0.94);
     text-decoration: none;
 }
+
+.country-flag {
+  width: 55px;
+  height: 33px;
+  object-fit: cover;
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.flag-with-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}

@@ -1,4 +1,4 @@
-namespace pcm_planner.Data;
+namespace Data;
 
 public static class CalendarHelpers
 {

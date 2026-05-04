@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS rider (
     birthdate_raw INTEGER,
     age INTEGER,
 
+    country TEXT,
+
     FOREIGN KEY (team_id) REFERENCES team(id)
 );
 
@@ -169,6 +171,8 @@ CREATE TABLE IF NOT EXISTS race (
     is_stage_race INTEGER,
 
     selected INTEGER,
+
+    country TEXT,
 
     FOREIGN KEY (race_class_id) REFERENCES race_class(id),
     FOREIGN KEY (race_type_id) REFERENCES race_type(id)

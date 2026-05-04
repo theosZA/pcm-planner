@@ -21,6 +21,7 @@ from migrate.parsing import (
     clean_text,
     to_int,
     calculate_age_from_birthdate,
+    load_country_lookup,
     read_game_date,
     read_player_team,
 )
@@ -43,6 +44,8 @@ def import_riders_and_stats(
     cyclist_xml = lachis_export / "DYN_cyclist.xml"
     riders_imported = 0
     stats_imported = 0
+
+    country_lookup = load_country_lookup(lachis_export)
 
     for row in parse_xml_rows(cyclist_xml, "DYN_cyclist"):
         source_rider_id = to_int(row.get("IDcyclist"))
@@ -67,14 +70,18 @@ def import_riders_and_stats(
         birthdate_raw = to_int(row.get("gene_i_birthdate"))
         age = calculate_age_from_birthdate(birthdate_raw, game_date)
 
+        source_region_id = to_int(row.get("fkIDregion"))
+        country = country_lookup.get(source_region_id) if source_region_id is not None else None
+
         conn.execute(
             """
             INSERT INTO rider (
                 source_rider_id, team_id, source_team_id,
                 first_name, last_name, display_name,
-                birthdate_raw, age
+                birthdate_raw, age,
+                country
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source_rider_id) DO UPDATE SET
                 team_id = excluded.team_id,
                 source_team_id = excluded.source_team_id,
@@ -82,12 +89,14 @@ def import_riders_and_stats(
                 last_name = excluded.last_name,
                 display_name = excluded.display_name,
                 birthdate_raw = excluded.birthdate_raw,
-                age = excluded.age;
+                age = excluded.age,
+                country = excluded.country;
             """,
             (
                 source_rider_id, local_team_id, source_team_id,
                 first_name, last_name, display_name,
                 birthdate_raw, age,
+                country,
             ),
         )
 

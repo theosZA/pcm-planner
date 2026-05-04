@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace pcm_planner.Data;
+namespace Data;
 
 public record RiderRaceDays(int Id, string DisplayName, int RaceDays);
 
@@ -8,6 +8,7 @@ public record RiderDetail(
     int Id,
     string DisplayName,
     int? Age,
+    string? Country,
     int? Flat, int? Hill, int? MediumMountain, int? Mountain,
     int? TimeTrial, int? Prologue, int? Cobble,
     int? Sprint, int? Acceleration,
@@ -31,6 +32,7 @@ public record RaceRider(int Id, string DisplayName, string? Role);
 public record RaceDetail(
     int Id,
     string Name,
+    string Country,
     DateOnly StartDate,
     DateOnly EndDate,
     List<RaceStage> Stages,
@@ -149,7 +151,7 @@ public class RosterService
 
     await using var command = connection.CreateCommand();
     command.CommandText = """
-            SELECT r.id, r.display_name, r.age,
+            SELECT r.id, r.display_name, r.age, r.country,
                    rs.flat, rs.hill, rs.medium_mountain, rs.mountain,
                    rs.time_trial, rs.prologue, rs.cobble,
                    rs.sprint, rs.acceleration,
@@ -170,10 +172,11 @@ public class RosterService
         reader.GetInt32(0),
         reader.GetString(1),
         NullableInt(reader, 2),
-        NullableInt(reader, 3), NullableInt(reader, 4), NullableInt(reader, 5), NullableInt(reader, 6),
-        NullableInt(reader, 7), NullableInt(reader, 8), NullableInt(reader, 9),
-        NullableInt(reader, 10), NullableInt(reader, 11),
-        NullableInt(reader, 12), NullableInt(reader, 13), NullableInt(reader, 14), NullableInt(reader, 15));
+        reader.IsDBNull(3) ? null : reader.GetString(3),
+        NullableInt(reader, 4), NullableInt(reader, 5), NullableInt(reader, 6), NullableInt(reader, 7),
+        NullableInt(reader, 8), NullableInt(reader, 9), NullableInt(reader, 10),
+        NullableInt(reader, 11), NullableInt(reader, 12),
+        NullableInt(reader, 13), NullableInt(reader, 14), NullableInt(reader, 15), NullableInt(reader, 16));
   }
 
   public async Task<List<RiderAssignedRace>> GetRiderAssignedRacesAsync(int riderId)
@@ -230,7 +233,7 @@ public class RosterService
     // Race header
     await using var raceCmd = connection.CreateCommand();
     raceCmd.CommandText = """
-            SELECT id, name, start_date, end_date
+            SELECT id, name, start_date, end_date, country
             FROM race
             WHERE id = @raceId
             """;
@@ -242,6 +245,7 @@ public class RosterService
     var name = raceReader.GetString(1);
     var startDate = DateOnly.Parse(raceReader.GetString(2));
     var endDate = DateOnly.Parse(raceReader.GetString(3));
+    var country = raceReader.GetString(4);
     await raceReader.CloseAsync();
 
     // Stages ordered by stage_number
@@ -306,7 +310,7 @@ public class RosterService
       squadProfile = optimiseReader.IsDBNull(1) ? null : optimiseReader.GetString(1);
     }
 
-    return new RaceDetail(raceId, name, startDate, endDate, stages, riders, stageValue, squadProfile);
+    return new RaceDetail(raceId, name, country, startDate, endDate, stages, riders, stageValue, squadProfile);
   }
 
   public async Task<List<RiderCalendarEntry>> GetAllRiderCalendarEntriesAsync()
