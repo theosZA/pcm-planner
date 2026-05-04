@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
 
-from optimise.model import PlannerData, Race, RaceDayPenalties, Rider, RiderRole
+from optimise.model import PlannerData, Race, RaceClass, RaceDayPenalties, Rider, RiderRole
 
 
 def find_overlapping_pairs(races: list[Race]) -> list[tuple[Race, Race]]:
@@ -29,7 +29,17 @@ def find_overlapping_pairs(races: list[Race]) -> list[tuple[Race, Race]]:
 
     A pair overlaps when either race's start date falls within the other's
     [start_date, end_date] range.  Races with no dates are excluded.
+
+    Pairs where both races are national championships (or NC ITTs) for
+    different countries are excluded: the nationality eligibility constraint
+    already makes it impossible for any rider to be assigned to both, so the
+    overlap constraint would be redundant.
     """
+    _nat_champ_classes = {RaceClass.NATIONAL_CHAMPIONSHIP, RaceClass.NATIONAL_CHAMPIONSHIP_ITT}
+
+    def is_nat_champ(race: Race) -> bool:
+        return race.race_class in _nat_champ_classes
+
     pairs: list[tuple[Race, Race]] = []
     for i in range(len(races)):
         a = races[i]
@@ -38,6 +48,8 @@ def find_overlapping_pairs(races: list[Race]) -> list[tuple[Race, Race]]:
         for j in range(i + 1, len(races)):
             b = races[j]
             if not b.start_date or not b.end_date:
+                continue
+            if is_nat_champ(a) and is_nat_champ(b) and a.country != b.country:
                 continue
             if b.start_date <= a.end_date and a.start_date <= b.end_date:
                 pairs.append((a, b))
@@ -186,6 +198,36 @@ def solve(
                 for role in compositions[race.id]
             )
             <= penalties.absolute_max
+        )
+
+    # National championship races: only riders whose country matches the race
+    # country may be assigned.  Races without a country set are unrestricted.
+    # Additionally, we must assign as many eligible riders as possible —
+    # i.e. exactly min(rider_capacity, eligible_rider_count).
+    _nat_champ_classes = {RaceClass.NATIONAL_CHAMPIONSHIP, RaceClass.NATIONAL_CHAMPIONSHIP_ITT}
+    for race in data.races:
+        if race.race_class not in _nat_champ_classes or not race.country:
+            continue
+        if race.id not in compositions:
+            continue
+        for rider in data.riders:
+            if rider.country != race.country:
+                model.add(
+                    sum(
+                        role_assigned[(rider.id, race.id, role)]
+                        for role in compositions[race.id]
+                    )
+                    == 0
+                )
+        eligible_count = sum(1 for rider in data.riders if rider.country == race.country)
+        required = min(race.rider_capacity, eligible_count)
+        model.add(
+            sum(
+                role_assigned[(rider.id, race.id, role)]
+                for rider in data.riders
+                for role in compositions[race.id]
+            )
+            == required
         )
 
     # A rider can't be assigned to two races that overlap in dates.

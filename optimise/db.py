@@ -114,6 +114,7 @@ def _load_riders(conn: sqlite3.Connection) -> list[Rider]:
             r.id,
             r.source_rider_id,
             r.display_name,
+            r.country,
             rs.flat,
             rs.hill,
             rs.medium_mountain,
@@ -140,6 +141,7 @@ def _load_riders(conn: sqlite3.Connection) -> list[Rider]:
             id=row["id"],
             source_rider_id=row["source_rider_id"],
             display_name=row["display_name"],
+            country=row["country"],
             flat=row["flat"],
             hill=row["hill"],
             medium_mountain=row["medium_mountain"],
@@ -188,13 +190,13 @@ def _load_races(conn: sqlite3.Connection) -> list[Race]:
             COALESCE(race.rider_capacity, 0) AS rider_capacity,
             COALESCE(race.is_stage_race, 0) AS is_stage_race,
             tre.invitation_state_id,
+            race.country,
             race.race_class_constant
         FROM race
         JOIN team_race_entry tre ON tre.race_id = race.id
         JOIN team t ON t.id = tre.team_id
         WHERE t.player IS NOT NULL
           AND tre.invitation_state_id IN (1, 3, 8)
-          AND COALESCE(race.level, '') NOT IN ('NationalChampionship', 'NationalChampionshipITT')
         ORDER BY race.start_date, race.name;
         """
     ).fetchall()
@@ -212,6 +214,7 @@ def _load_races(conn: sqlite3.Connection) -> list[Race]:
             rider_capacity=row["rider_capacity"],
             is_stage_race=bool(row["is_stage_race"]),
             invitation_state_id=row["invitation_state_id"],
+            country=row["country"],
             race_class=RaceClass.from_raw(row["race_class_constant"]),
         )
         for row in rows
@@ -233,7 +236,6 @@ def _load_stages(conn: sqlite3.Connection) -> list[Stage]:
         JOIN team t ON t.id = tre.team_id
         WHERE t.player IS NOT NULL
           AND tre.invitation_state_id IN (1, 3, 8)
-          AND COALESCE(race.level, '') NOT IN ('NationalChampionship', 'NationalChampionshipITT')
         ORDER BY s.race_id, s.stage_number;
         """
     ).fetchall()

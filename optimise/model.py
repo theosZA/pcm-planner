@@ -97,6 +97,7 @@ class Rider:
     id: int                 # planner DB primary key
     source_rider_id: int    # original PCM rider ID
     display_name: str
+    country: Optional[str] = None  # ISO-style country code from the rider table
 
     # Performance stats — Optional because a stat row might theoretically be absent.
     flat: Optional[int] = None
@@ -129,6 +130,7 @@ class Race:
     rider_capacity: int         # squad size required (from race class max_riders)
     is_stage_race: bool
     invitation_state_id: int    # see team_race_entry.invitation_state_id
+    country: Optional[str] = None       # host nation code; set for national champs
     race_class: RaceClass | None = None  # None for unrecognised race classes
 
 

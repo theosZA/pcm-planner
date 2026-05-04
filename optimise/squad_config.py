@@ -29,6 +29,12 @@ SQUAD_COMPOSITIONS: dict[tuple[SquadProfile, int], dict[RiderRole, int]] = {
         RiderRole.DOMESTIQUE:     3,
         RiderRole.FREE:           1,
     },
+    (SquadProfile.SPRINT, 8): {
+        RiderRole.SPRINT_LEAD:    1,
+        RiderRole.SPRINT_LEADOUT: 2,
+        RiderRole.DOMESTIQUE:     3,
+        RiderRole.FREE:           2,
+    },
     (SquadProfile.CLIMBING, 6): {
         RiderRole.CLIMBING_LEAD:       1,
         RiderRole.CLIMBING_DOMESTIQUE: 2,
@@ -40,6 +46,12 @@ SQUAD_COMPOSITIONS: dict[tuple[SquadProfile, int], dict[RiderRole, int]] = {
         RiderRole.CLIMBING_DOMESTIQUE: 2,
         RiderRole.DOMESTIQUE:          3,
         RiderRole.FREE:                1,
+    },
+    (SquadProfile.CLIMBING, 8): {
+        RiderRole.CLIMBING_LEAD:       1,
+        RiderRole.CLIMBING_DOMESTIQUE: 2,
+        RiderRole.DOMESTIQUE:          3,
+        RiderRole.FREE:                2,
     },
     (SquadProfile.STAGE_RACE, 6): {
         RiderRole.CLIMBING_LEAD:       1,
@@ -66,5 +78,8 @@ SQUAD_COMPOSITIONS: dict[tuple[SquadProfile, int], dict[RiderRole, int]] = {
     },
     (SquadProfile.TIME_TRIAL, 3): {
         RiderRole.TIME_TRIAL: 3,
+    },
+    (SquadProfile.TIME_TRIAL, 8): {
+        RiderRole.TIME_TRIAL: 8,
     },
 }

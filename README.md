@@ -107,16 +107,15 @@ Each race is automatically classified into a **squad profile** based on its stag
 | `climbing` | Single-day classic, Mountain terrain |
 | `stage_race` | Any multi-stage race |
 
-The profile and squad size determine the role breakdown (from `squad_config.py`). The solver then scores every rider–race–role triple by combining a terrain suitability score (matching rider stats to stage profiles) with a role fitness score (e.g. a `sprint_lead` role rewards Sprint and Acceleration). It maximises total score subject to four hard constraints:
+The profile and squad size determine the role breakdown (from `squad_config.py`). The solver then scores every rider–race–role triple by combining a terrain suitability score (matching rider stats to stage profiles) with a role fitness score (e.g. a `sprint_lead` role rewards Sprint and Acceleration). It maximises total score subject to these hard constraints:
 
 - Each role slot in every race is filled the correct number of times.
 - No rider fills more than one role in any given race.
 - No rider is assigned to overlapping races.
 - No rider is assigned more than 100 race days.
+- For national championship races, only riders whose nationality matches the host country may be assigned, and all eligible riders in the squad must be sent (up to squad capacity).
 
-And score is penalized for falling outside the 60- to 70-day target workload. The workload ranges and penalties, and the absolute maximum number of race days allowed, are configured in `RaceDayPenalties` in `model.py`. 
-
-National championship races are excluded for now as the assignment logic doesn't know about rider nationalities.
+And score is penalized for falling outside the 60- to 70-day target workload. The workload ranges and penalties, and the absolute maximum number of race days allowed, are configured in `RaceDayPenalties` in `model.py`.
 
 ---
 
@@ -182,7 +181,6 @@ The database path is set in `appsettings.json` under `DatabasePath` (default: `.
 
 ## What's not yet built
 
-- National championships
 - Writeback to PCM save files
 - Manual race assignment overrides
 - Season objectives, fitness peaks and recovery time
