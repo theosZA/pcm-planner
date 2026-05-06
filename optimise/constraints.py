@@ -20,8 +20,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from optimise.model import PlannerData, RiderRole, SquadProfile
-from optimise.squad_config import SQUAD_COMPOSITIONS
+from optimise import config as _config
+from optimise.config import RaceDayPenalties
+from optimise.model import PlannerData, RaceClass, SquadProfile
 
 
 @dataclass
@@ -73,26 +74,47 @@ def check_races_have_stage_data(data: PlannerData) -> CheckResult:
     return CheckResult(True, "All races have stage data and squad size information.")
 
 
-def check_aggregate_feasibility(data: PlannerData) -> CheckResult:
+def check_aggregate_feasibility(
+    data: PlannerData,
+    penalties: RaceDayPenalties | None = None,
+) -> CheckResult:
     """Check that total rider-days demanded does not exceed total rider-days available.
 
     This is a necessary (not sufficient) condition for a valid assignment to exist.
     It confirms there is enough aggregate squad capacity before considering race
     overlaps and per-rider limits.
 
+    For national championship races the effective squad size is capped at the
+    number of eligible (matching-country) riders, since those races may be
+    undersubscribed when the squad lacks enough nationals.
+
     Calculation:
-        demanded  = Σ (race_days × rider_capacity) for all races
-        available = 75 × number of riders
+        demanded  = Σ (race_days × effective_capacity) for all races
+        available = penalties.upper_warning × number of riders
     """
-    demanded = data.total_race_days_demanded
-    available = data.total_rider_days_available
+    if penalties is None:
+        penalties = _config.race_day_penalties()
+    cap = penalties.upper_warning
+
+    _nat_champ_classes = {RaceClass.NATIONAL_CHAMPIONSHIP, RaceClass.NATIONAL_CHAMPIONSHIP_ITT}
+
+    demanded = 0
+    for race in data.races:
+        if race.race_class in _nat_champ_classes and race.country:
+            eligible = sum(1 for r in data.riders if r.country == race.country)
+            effective_capacity = min(race.rider_capacity, eligible)
+        else:
+            effective_capacity = race.rider_capacity
+        demanded += race.race_days * effective_capacity
+
+    available = data.total_rider_days_available(cap)
 
     if demanded <= available:
         return CheckResult(
             True,
             f"Aggregate feasibility OK — {demanded} rider-days demanded "
             f"vs {available} available "
-            f"(75 × {len(data.riders)} riders). "
+            f"({cap} × {len(data.riders)} riders). "
             f"{available - demanded} rider-days of slack.",
         )
 
@@ -100,7 +122,7 @@ def check_aggregate_feasibility(data: PlannerData) -> CheckResult:
         False,
         f"Aggregate feasibility FAILED — {demanded} rider-days demanded "
         f"exceeds {available} available "
-        f"(75 × {len(data.riders)} riders) "
+        f"({cap} × {len(data.riders)} riders) "
         f"by {demanded - available} rider-days.",
     )
 
@@ -115,13 +137,14 @@ def check_races_have_squad_composition(
     catches missing config entries before the solver runs.
     """
     missing: list[str] = []
+    compositions = _config.squad_compositions()
     for race in data.races:
         if race.rider_capacity == 0:
             continue  # already caught by check_races_have_stage_data
         profile, _ = race_profiles.get(race.id, (None, None))
         if profile is None:
             continue
-        if (profile, race.rider_capacity) not in SQUAD_COMPOSITIONS:
+        if (profile, race.rider_capacity) not in compositions:
             missing.append(
                 f"{race.abbreviation or race.name} "
                 f"({profile.value}, {race.rider_capacity} riders)"
@@ -138,13 +161,14 @@ def check_races_have_squad_composition(
 def run_all_checks(
     data: PlannerData,
     race_profiles: dict[int, tuple[SquadProfile, int]] | None = None,
+    penalties: RaceDayPenalties | None = None,
 ) -> list[CheckResult]:
     """Run all validation checks in order and return the full list of results."""
     checks = [
         check_riders_present(data),
         check_races_present(data),
         check_races_have_stage_data(data),
-        check_aggregate_feasibility(data),
+        check_aggregate_feasibility(data, penalties),
     ]
     if race_profiles is not None:
         checks.append(check_races_have_squad_composition(data, race_profiles))

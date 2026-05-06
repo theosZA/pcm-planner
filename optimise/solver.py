@@ -21,7 +21,9 @@ from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
 
-from optimise.model import PlannerData, Race, RaceClass, RaceDayPenalties, Rider, RiderRole
+from optimise import config as _config
+from optimise.config import RaceDayPenalties
+from optimise.model import PlannerData, Race, RaceClass, Rider, RiderRole
 
 
 def find_overlapping_pairs(races: list[Race]) -> list[tuple[Race, Race]]:
@@ -102,7 +104,7 @@ def solve(
     SolveResult with the solver status, objective value, and assignment dict.
     """
     if penalties is None:
-        penalties = RaceDayPenalties()
+        penalties = _config.race_day_penalties()
 
     model = cp_model.CpModel()
 

@@ -2,8 +2,8 @@
 Database schema and setup for the PCM Season Planner SQLite database.
 
 Responsibilities:
-- DROP_SQL / SCHEMA_SQL: complete SQL DDL for all planner tables and indexes.
-- initialise_database(): creates or optionally resets the planner database.
+- SCHEMA_SQL: complete SQL DDL for all planner tables and indexes.
+- initialise_database(): resets and recreates the planner database from scratch.
 - insert_import_run(): records a new import session for audit purposes.
 """
 
@@ -334,11 +334,10 @@ CREATE INDEX IF NOT EXISTS idx_optimise_assignment_rider
 """
 
 
-def initialise_database(target: Path, reset: bool) -> None:
-    """Create (or optionally reset) the planner SQLite database and apply the schema.
+def initialise_database(target: Path) -> None:
+    """Reset and recreate the planner SQLite database from scratch.
 
-    If reset is True, all existing planner tables are dropped before the schema
-    is recreated. This is a destructive operation — use only for a clean rebuild.
+    Drops all existing planner tables then applies the full schema DDL.
     Creates the parent directory of target if it does not already exist.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -346,9 +345,7 @@ def initialise_database(target: Path, reset: bool) -> None:
     with sqlite3.connect(target) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
 
-        if reset:
-            conn.executescript(DROP_SQL)
-
+        conn.executescript(DROP_SQL)
         conn.executescript(SCHEMA_SQL)
 
         conn.execute(

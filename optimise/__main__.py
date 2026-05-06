@@ -2,9 +2,11 @@
 Command-line entry point for the PCM Season Planner optimiser.
 
 Usage:
-    python -m optimise --database data/planner.sqlite
+    python -m optimise
+    python -m optimise --database data/planner.sqlite --time-limit 60
 
 Loads data, runs feasibility checks, then solves the CP-SAT model.
+Default values for --database and --time-limit come from config.yaml.
 
 Exit code 0 = all checks passed. Exit code 1 = one or more checks failed.
 """
@@ -15,54 +17,38 @@ import argparse
 import sys
 from pathlib import Path
 
-from optimise import constraints, db, scoring, solver
-from optimise.model import RaceDayPenalties, RiderRole
-from optimise.squad_config import SQUAD_COMPOSITIONS
+from optimise import config, constraints, db, scoring, solver
+from optimise.model import RiderRole
 
 
 def main() -> None:
+    run_cfg = config.run_config()
+
     parser = argparse.ArgumentParser(
         description="PCM Season Planner optimiser.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--database",
-        required=True,
-        help="Path to the planner SQLite database (produced by python -m migrate).",
+        default=None,
+        metavar="PATH",
+        help=f"Path to the planner SQLite database. Overrides config.yaml (default: {run_cfg.database}).",
     )
     parser.add_argument(
         "--time-limit",
         type=float,
         default=None,
         metavar="SECONDS",
-        help="Maximum solver wall-clock time in seconds. Omit for no limit.",
+        help=f"Maximum solver wall-clock time in seconds. Overrides config.yaml (default: {run_cfg.time_limit}).",
     )
-
-    rdp = parser.add_argument_group(
-        "race-day penalties",
-        "Penalty config that shapes per-rider race-day totals in the objective.",
-    )
-    rdp.add_argument("--target-min",            type=int, default=60,  metavar="DAYS",  help="Target minimum race days (default: 60).")
-    rdp.add_argument("--target-max",            type=int, default=70,  metavar="DAYS",  help="Target maximum race days (default: 70).")
-    rdp.add_argument("--upper-warning",         type=int, default=75,  metavar="DAYS",  help="Warning threshold above target (default: 75).")
-    rdp.add_argument("--absolute-max",          type=int, default=100, metavar="DAYS",  help="Hard cap on race days (default: 100).")
-    rdp.add_argument("--under-min-penalty",     type=int, default=20,  metavar="PTS",   help="Penalty per day under target-min (default: 20).")
-    rdp.add_argument("--above-target-penalty",  type=int, default=30,  metavar="PTS",   help="Penalty per day above target-max up to upper-warning (default: 30).")
-    rdp.add_argument("--above-warning-penalty", type=int, default=200, metavar="PTS",   help="Penalty per day above upper-warning (default: 200).")
-
     args = parser.parse_args()
 
-    penalties = RaceDayPenalties(
-        target_min=args.target_min,
-        target_max=args.target_max,
-        upper_warning=args.upper_warning,
-        absolute_max=args.absolute_max,
-        under_min_penalty_per_day=args.under_min_penalty,
-        above_target_penalty_per_day=args.above_target_penalty,
-        above_warning_penalty_per_day=args.above_warning_penalty,
-    )
+    database = args.database if args.database is not None else run_cfg.database
+    time_limit = args.time_limit if args.time_limit is not None else run_cfg.time_limit
 
-    conn = db.connect(Path(args.database))
+    penalties = config.race_day_penalties()
+
+    conn = db.connect(Path(database))
     data = db.load_planner_data(conn)
 
     # --- Season summary -------------------------------------------------------
@@ -109,11 +95,12 @@ def main() -> None:
     # --- Squad compositions ---------------------------------------------------
     race_map = {r.id: r for r in data.races}
     compositions: dict[int, dict] = {}
+    squad_comps = config.squad_compositions()
     print("Squad compositions:")
     col_name = 42
     for race_id, (profile, _stage_value) in race_profiles.items():
         race = race_map[race_id]
-        composition = SQUAD_COMPOSITIONS.get((profile, race.rider_capacity))
+        composition = squad_comps.get((profile, race.rider_capacity))
         profile_label = profile.value
         if composition is None:
             roles_str = "(no composition defined)"
@@ -127,7 +114,7 @@ def main() -> None:
 
     # --- Validation checks ----------------------------------------------------
     print("Validation:")
-    results = constraints.run_all_checks(data, race_profiles)
+    results = constraints.run_all_checks(data, race_profiles, penalties)
     for result in results:
         print(f"  {result}")
 
@@ -136,9 +123,9 @@ def main() -> None:
 
     # --- CP-SAT solve ---------------------------------------------------------
     print()
-    time_limit_msg = f"{args.time_limit}s" if args.time_limit is not None else "none"
+    time_limit_msg = f"{time_limit}s" if time_limit is not None else "none"
     print(f"Solving…  (time limit: {time_limit_msg})")
-    result = solver.solve(data, matrix, compositions, time_limit=args.time_limit, penalties=penalties)
+    result = solver.solve(data, matrix, compositions, time_limit=time_limit, penalties=penalties)
     print(f"  Status:      {result.status}")
     print(f"  Objective:   {result.objective_value:,}  (scores minus race-day penalties)")
     print(f"  Assignments: {result.total_assignments}  "

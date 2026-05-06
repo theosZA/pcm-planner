@@ -1,0 +1,99 @@
+# PCM Season Planner – global configuration
+#
+# Add new top-level sections here as further config is migrated from Python
+# source code.  Each section is exposed as a typed accessor in optimise/config.py.
+
+run:
+  # Path to the planner SQLite database (produced by python -m migrate).
+  database: data/planner.sqlite
+  # Maximum solver wall-clock time in seconds.  null = no limit.
+  time_limit: 30
+
+migrate:
+  # Path to the Lachis Editor XML export folder.
+  # Required for all import operations; null to run schema-only.
+  lachis_export: C:\Utilities\LachisEditor\Data\Career_1
+  # Path to the mod/workshop Stages folder, searched before the base game.
+  mod_stages: F:\SteamLibrary\steamapps\workshop\content\2494350\3262564567\Stages
+  # Path to the base-game CM_Stages folder.
+  base_stages: F:\SteamLibrary\steamapps\common\Pro Cycling Manager 2024\CM_Stages
+  # Path to CTStageEditor.exe.
+  stage_editor_exe: F:\SteamLibrary\steamapps\common\Pro Cycling Manager 2024 Tool\CTStageEditor.exe
+
+race_day_penalties:
+  # Per-rider race-day band that the solver tries to keep each rider inside.
+  target_min: 60
+  target_max: 70
+  # Soft upper bound: days above this incur a steep penalty.
+  upper_warning: 75
+  # Hard cap enforced as a constraint (no rider may exceed this).
+  absolute_max: 100
+
+  # Penalty weights (subtracted from the objective per offending day).
+  under_min_penalty_per_day: 30
+  above_target_penalty_per_day: 20
+  above_warning_penalty_per_day: 200
+
+# Squad compositions define how many of each rider role make up a squad for a
+# given (profile, squad_size) pair.  Keys are SquadProfile.value strings;
+# nested keys are squad sizes (integers); innermost keys are RiderRole.value
+# strings.  Role counts must sum to the squad size.
+squad_compositions:
+  sprint:
+    6:
+      sprint_lead: 1
+      sprint_leadout: 2
+      domestique: 2
+      free: 1
+    7:
+      sprint_lead: 1
+      sprint_leadout: 2
+      domestique: 3
+      free: 1
+    8:
+      sprint_lead: 1
+      sprint_leadout: 2
+      domestique: 3
+      free: 2
+  climbing:
+    6:
+      climbing_lead: 1
+      climbing_domestique: 2
+      domestique: 2
+      free: 1
+    7:
+      climbing_lead: 1
+      climbing_domestique: 2
+      domestique: 3
+      free: 1
+    8:
+      climbing_lead: 1
+      climbing_domestique: 2
+      domestique: 3
+      free: 2
+  stage_race:
+    6:
+      climbing_lead: 1
+      climbing_domestique: 2
+      sprint_lead: 1
+      sprint_leadout: 1
+      domestique: 1
+    7:
+      climbing_lead: 1
+      climbing_domestique: 2
+      sprint_lead: 1
+      sprint_leadout: 1
+      domestique: 1
+      free: 1
+    8:
+      climbing_lead: 1
+      climbing_domestique: 3
+      sprint_lead: 1
+      sprint_leadout: 1
+      domestique: 1
+      free: 1
+  time_trial:
+    3:
+      time_trial: 3
+    8:
+      time_trial: 8
