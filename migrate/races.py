@@ -497,7 +497,6 @@ def import_lachis_race_and_stage_data(
     and all stages are re-exported. Leave False (default) to reuse cached XMLs.
     """
     source_team_id, player_name = read_player_team(lachis_export)
-    print(f"Player: {player_name!r} — team source_id: {source_team_id}")
 
     with sqlite3.connect(target) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -553,12 +552,7 @@ def import_lachis_race_and_stage_data(
 
         conn.commit()
 
-    print(f"Race classes imported: {race_classes_imported}")
-    print(f"Race types imported: {race_types_imported}")
-    print(f"Team race entries imported: {team_race_entries_imported}")
-    print(f"Team-entered races imported: {races_imported}")
-    print(f"Race rules overrides applied: {race_rules_overridden}")
-    print(f"Selected stages imported: {stages_imported}")
-    print(f"Stages updated with Stage Editor XML metadata: {stages_updated}")
+    print(f"Races imported: {races_imported}")
+    print(f"Stages imported: {stages_imported}")
     print(f"Missing stage files: {missing_stage_files}")
     print(f"Missing exported stage XML files: {missing_exported_xml}")

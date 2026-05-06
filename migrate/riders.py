@@ -179,7 +179,7 @@ def import_lachis_rider_data(
     print(f"Game date (from GAM_config.xml): {game_date}")
 
     source_team_id, player_name = read_player_team(lachis_export)
-    print(f"Player: {player_name!r} — team source_id: {source_team_id}")
+    print(f"Player: {player_name}")
 
     with sqlite3.connect(target) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -202,7 +202,4 @@ def import_lachis_rider_data(
 
         conn.commit()
 
-    print(f"Import run ID: {import_run_id}")
-    print(f"Teams imported: {teams_imported}")
-    print(f"Riders imported for team {source_team_id} ({player_name!r}): {riders_imported}")
-    print(f"Rider stat rows imported: {stats_imported}")
+    print(f"Riders imported: {riders_imported}")

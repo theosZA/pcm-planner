@@ -95,7 +95,6 @@ def main() -> None:
 
     # --- Schema setup -------------------------------------------------------
     initialise_database(target=target)
-    print(f"Planner database ready (reset): {target}")
 
     # --- Rider import -------------------------------------------------------
     import_lachis_rider_data(

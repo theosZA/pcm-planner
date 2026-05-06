@@ -9,7 +9,7 @@ Defines the domain objects that represent the planning problem:
   optimisation run, with aggregate computed properties used by validation and
   the optimiser alike.
 
-All data flows into these classes from db.py and out to constraints.py and
+All data flows into these classes from db.py and out to validation.py and
 the optimisation logic. Nothing in this module touches the database directly.
 """
 

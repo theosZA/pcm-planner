@@ -23,8 +23,7 @@ from ortools.sat.python import cp_model
 
 from optimise import config as _config
 from optimise.config import RaceDayPenalties
-from optimise.model import PlannerData, Race, RaceClass, Rider, RiderRole
-
+from optimise.model import PlannerData, Race, RaceClass, RiderRole
 
 def find_overlapping_pairs(races: list[Race]) -> list[tuple[Race, Race]]:
     """Return all (a, b) race pairs whose date ranges overlap (inclusive).
@@ -234,7 +233,6 @@ def solve(
 
     # A rider can't be assigned to two races that overlap in dates.
     overlapping_pairs = find_overlapping_pairs(data.races)
-    print(f"  Overlapping race pairs: {len(overlapping_pairs)}")
 
     for rider in data.riders:
         for a, b in overlapping_pairs:
